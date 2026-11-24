@@ -17,8 +17,8 @@ async function preference(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,authUserId
  return ctx.db.query('analyticsPreferences').withIndex('by_room_user',q=>q.eq('roomId',roomId).eq('authUserId',authUserId)).unique()
 }
 async function setPreference(ctx:MutationCtx,roomId:Id<'rooms'>,userId:string,allowed:boolean){
- if(allowed&&!await scope(ctx,roomId,userId))throw Error('Unavailable')
  const prior=await preference(ctx,roomId,userId)
+ if((allowed||!prior)&&!await scope(ctx,roomId,userId))throw Error('Unavailable')
  if(prior)await ctx.db.patch(prior._id,{allowed,updatedAt:Date.now()});else await ctx.db.insert('analyticsPreferences',{roomId,authUserId:userId,allowed,updatedAt:Date.now()})
  return {ok:true}
 }

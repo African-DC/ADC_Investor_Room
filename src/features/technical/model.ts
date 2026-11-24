@@ -9,7 +9,7 @@ export function targetsFor(raw:string|undefined,roomId:string):Target[]{
   if(!Array.isArray(rows)||rows.length>10)return []
   const targets:Target[]=[]
   for(const row of rows){
-   if(!row||typeof row!=='object'||typeof row.key!=='string'||!/^[a-z0-9-]{1,40}$/.test(row.key)||typeof row.label!=='string'||!row.label.trim()||row.label.length>100||typeof row.repo!=='string'||!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(row.repo)||!Number.isSafeInteger(row.order)||row.order<0||row.order>10000||targets.some(t=>t.key===row.key))return []
+   if(!row||typeof row!=='object'||typeof row.key!=='string'||!/^[a-z0-9-]{1,40}$/.test(row.key)||typeof row.label!=='string'||!row.label.trim()||row.label.length>100||typeof row.repo!=='string'||!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(row.repo)||row.repo.split('/').some((s:string)=>s==='.'||s==='..')||!Number.isSafeInteger(row.order)||row.order<0||row.order>10000||targets.some(t=>t.key===row.key))return []
    targets.push({key:row.key,label:row.label,repo:row.repo,order:row.order})
   }
   return targets
