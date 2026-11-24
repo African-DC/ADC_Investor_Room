@@ -69,7 +69,15 @@ export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>
    sections.push({id:section._id,slug:section.slug,category:section.category,order:section.order,published:!!section.publishedVersionId,latest:canEdit&&version&&version.roomId===a.roomId&&version.sectionId===section._id?{id:version._id,number:version.version,state:version.state,titleFr:version.titleFr,titleEn:version.titleEn,bodyFr:version.bodyFr,bodyEn:version.bodyEn,source:version.source,own:version.authorId===user._id}:null})
   }
  }
- return {room:{id:room._id,name:room.name,status:room.status},capabilities,applicants,sections}
+ const documents=[]
+ if(capabilities.includes('content:edit')||capabilities.includes('content:review')||capabilities.includes('access:manage')){
+  const rows=await ctx.db.query('documents').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(101)
+  if(rows.length>100)throw Error('Pagination required')
+  for(const document of rows){const version=document.currentVersionId?await ctx.db.get(document.currentVersionId):null
+   documents.push({id:document._id,titleFr:document.titleFr,titleEn:document.titleEn,category:document.category,status:document.status,version:version&&version.roomId===a.roomId&&version.documentId===document._id?{number:version.version,scanStatus:version.scanStatus,sizeBytes:version.sizeBytes}:null})
+  }
+ }
+ return {room:{id:room._id,name:room.name,status:room.status},capabilities,applicants,sections,documents}
 }})
 export const grant=mutation({args:{roomId:v.id('rooms'),profileId:v.id('investorProfiles'),capability:v.union(v.literal('room:read'),v.literal('section:read')),sectionId:v.optional(v.id('sections')),effect:v.union(v.literal('allow'),v.literal('deny')),expiresAt:v.optional(v.number())},handler:async(ctx,a):Promise<Id<'accessGrants'>>=>{
  const {user}=await admin(ctx,a.roomId,'access:manage')
@@ -102,4 +110,14 @@ export const archive=mutation({args:{roomId:v.id('rooms'),sectionId:v.id('sectio
  const {user}=await admin(ctx,a.roomId,'content:review')
  const section=await ctx.db.get(a.sectionId);if(!section||section.roomId!==a.roomId)throw new Error('Unavailable')
  await ctx.runMutation(internal.stagingCms.archive,{sectionId:a.sectionId,operatorId:user._id});return {ok:true}
+}})
+
+export const grantDocument=mutation({args:{roomId:v.id('rooms'),profileId:v.id('investorProfiles'),documentId:v.id('documents'),capability:v.union(v.literal('document:read'),v.literal('document:download')),effect:v.union(v.literal('allow'),v.literal('deny')),expiresAt:v.optional(v.number())},handler:async(ctx,a):Promise<Id<'accessGrants'>>=>{
+ const {user}=await admin(ctx,a.roomId,'access:manage')
+ const applicant=await ctx.db.query('roomApplicants').withIndex('by_room_profile',q=>q.eq('roomId',a.roomId).eq('profileId',a.profileId)).unique()
+ const profile=applicant?await ctx.db.get(applicant.profileId):null
+ if(!profile)throw Error('Unavailable')
+ const document=await ctx.db.get(a.documentId)
+ if(!document||document.roomId!==a.roomId)throw Error('Unavailable')
+ return await ctx.runMutation(internal.documents.grant,{roomId:a.roomId,documentId:a.documentId,authUserId:profile.authUserId,capability:a.capability,effect:a.effect,expiresAt:a.expiresAt,operatorId:user._id})
 }})
