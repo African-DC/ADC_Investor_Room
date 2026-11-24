@@ -1,0 +1,4 @@
+# Gouvernance éditoriale
+Chaque contenu FR/EN porte auteur, version, source, statut brouillon/revue/publié/archivé, audience et date. Validation distincte des données sensibles. Ne jamais committer les vrais documents/clients/PII/secrets. Les fixtures sont explicitement fictives.
+Finance : séparer factures émises, encaissements, CA comptable, ARR et projections; frais initiaux vs abonnement vs SMS/WhatsApp/email/développements. Distinguer comptes payants, sites et pilotes. Montants XOF entiers, période, définition, source et pièces versionnées; aucune valeur non vérifiée présentée comme acquise. Rapprochement et revue avant publication. Ne jamais fabriquer une facture, preuve ou signature. Les pièces en collecte sont signalées, pas inventées.
+Technologie : architecture et capacités vérifiées à une date; séparer disponible, développement et roadmap; aucun code brut, identifiants ni infra sensible publié. Sources GitHub internes et validation humaine.

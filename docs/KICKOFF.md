@@ -1,0 +1,2 @@
+# Kickoff
+Lire AGENTS et docs. Poursuivre E01 sur feat/E01-foundations; installer les dépendances compatibles, générer lockfile pnpm, vérifier build, typecheck, lint et tests; valider les spikes auth/stockage/e-mail sur environnement isolé. Ne pas fusionner ni publier; documenter blocages. Ne pas déclarer le wizard fonctionnel côté serveur avant E04.

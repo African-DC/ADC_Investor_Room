@@ -1,0 +1,1 @@
+Lire et appliquer AGENTS.md intégralement, docs/PRD.md, docs/ARCHITECTURE.md, docs/DESIGN.md, docs/CONTENT.md et docs/BACKLOG.md. Travailler sur l'epic actif uniquement, sans merge ni production. Signaler précisément les tests non exécutés.

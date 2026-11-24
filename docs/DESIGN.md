@@ -1,0 +1,3 @@
+# Design system
+Source officielle African-DC/adc-website : public/img/adc-logo.png (copie locale), tailwind.config.ts et app/globals.css (Poppins, Montserrat, Fraunces; foreground bleu nuit). Palette de travail du scaffold à valider avec ADC : fond ivoire, bleu nuit, accent chaud. Pas de nouveau logo. Typographies de repli tant que fonts officielles non intégrées. Inspiration Linear/Stripe/Notion/Papermark sans copie.
+Accueil calme, texte éditorial, CTA unique, formulaire progressif avec retour/skip, confirmation claire sans faux succès. Espace privé : sidebar, résumé éditorial, preuves, mobile. Focus visible, contrastes, reduced-motion, navigation clavier, textes FR/EN et états vides/erreur. Recette 360/768/1440.
