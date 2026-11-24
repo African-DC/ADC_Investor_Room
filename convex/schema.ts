@@ -19,5 +19,6 @@ export default defineSchema({
  questionMessages:defineTable({roomId:v.id('rooms'),questionId:v.id('questions'),sender:v.union(v.literal('investor'),v.literal('adc')),actorId:v.string(),body:v.string(),at:v.number()}).index('by_question',['questionId']),
  analyticsPreferences:defineTable({roomId:v.id('rooms'),authUserId:v.string(),allowed:v.boolean(),updatedAt:v.number()}).index('by_room_user',['roomId','authUserId']),
  engagement:defineTable({roomId:v.id('rooms'),authUserId:v.string(),day:v.string(),kind:v.union(v.literal('section_open'),v.literal('document_view_authorized'),v.literal('document_download_authorized')),resourceId:v.string(),at:v.number()}).index('by_dedup',['roomId','authUserId','day','kind','resourceId']).index('by_room_day',['roomId','day']).index('by_at',['at']),
+ aiQuotas:defineTable({roomId:v.id('rooms'),authUserId:v.string(),hour:v.number(),count:v.number()}).index('by_room_user_hour',['roomId','authUserId','hour']).index('by_hour',['hour']),
  auditLogs:defineTable({actorId:v.string(),event:v.string(),resourceId:v.optional(v.string()),at:v.number()}).index('by_actor',['actorId']),
 })

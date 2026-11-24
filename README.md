@@ -37,3 +37,6 @@ Consent-gated, deduplicated and scoped daily engagement, aggregate dashboard, ma
 
 ## E14 GitHub reporting
 Allowlisted metadata snapshots and reviewed CMS draft, staging only. See docs/GITHUB_REPORTING.md. No code or secrets exposed.
+
+## E15 ADC Intelligence
+See docs/INTELLIGENCE_SETUP.md. Live ACL-filtered evidence retrieval and optional Vercel AI SDK structured selection; no generated financial claims. Default off.
