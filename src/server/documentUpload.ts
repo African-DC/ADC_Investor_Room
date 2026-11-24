@@ -1,4 +1,3 @@
-import {PutObjectCommand,S3Client} from '@aws-sdk/client-s3'
 import {createHash} from 'node:crypto'
 import {getAuthBridge} from '../lib/auth-server'
 import {api} from '../../convex/_generated/api'
@@ -17,21 +16,24 @@ export async function uploadDocument(request:Request){
  const roomId=new URL(request.url).searchParams.get('roomId')
  const contentType=request.headers.get('content-type')??'',length=Number(request.headers.get('content-length'))
  if(!roomId||roomId.length>128||!contentType.startsWith('multipart/form-data;')||!Number.isSafeInteger(length)||length<1||length>MAX_REQUEST)return response(400)
- const endpoint=process.env.R2_ENDPOINT,bucket=process.env.R2_BUCKET,accessKeyId=process.env.R2_UPLOAD_ACCESS_KEY_ID,secretAccessKey=process.env.R2_UPLOAD_SECRET_ACCESS_KEY
- if(!endpoint||!bucket||!accessKeyId||!secretAccessKey)return response(503)
+ const convexUrl=process.env.VITE_CONVEX_URL,siteUrl=process.env.VITE_CONVEX_SITE_URL
+ if(!convexUrl||!siteUrl)return response(503)
  try{
-  if(!await bridge.fetchAuthQuery(api.documents.authorizeUpload,{roomId:roomId as Id<'rooms'>,secret}))return response(404)
-  const target=new URL(endpoint);if(target.protocol!=='https:'||!target.hostname.endsWith('.r2.cloudflarestorage.com')||target.username||target.password||target.port||target.pathname!=='/'||target.search||target.hash)return response(503)
+  const uploadUrl=await bridge.fetchAuthMutation(api.documents.authorizeUpload,{roomId:roomId as Id<'rooms'>,secret})
+  if(!uploadUrl)return response(404)
+  const target=new URL(uploadUrl);if(![new URL(convexUrl).origin,new URL(siteUrl).origin].includes(target.origin)||target.username||target.password||target.hash)return response(503)
   const form=await new Response(await boundedBody(request),{headers:{'Content-Type':contentType}}).formData()
   if(form.getAll('file').length!==1)return response(400)
   const file=form.get('file'),titleFr=form.get('titleFr'),titleEn=form.get('titleEn'),category=form.get('category')
   if(!(file instanceof File)||typeof titleFr!=='string'||typeof titleEn!=='string'||typeof category!=='string'||file.type!=='application/pdf'||!validUpload({titleFr,titleEn,category,sizeBytes:file.size}))return response(400)
   const bytes=new Uint8Array(await file.arrayBuffer());if(!isPdf(bytes))return response(400)
-  const sha256=createHash('sha256').update(bytes).digest('hex'),objectKey=`rooms/${roomId}/${sha256}.pdf`
-  const s3=new S3Client({region:'auto',endpoint,credentials:{accessKeyId,secretAccessKey},forcePathStyle:true})
-  try{await s3.send(new PutObjectCommand({Bucket:bucket,Key:objectKey,Body:bytes,ContentType:'application/pdf',Metadata:{sha256}}))}finally{s3.destroy()}
-  // Recheck membership after upload. On failure, the object remains private and unreferenced; never delete a shared hash automatically.
-  await bridge.fetchAuthMutation(api.documents.completeUpload,{roomId:roomId as Id<'rooms'>,titleFr,titleEn,category,objectKey,sha256,sizeBytes:bytes.length,secret})
+  const sha256=createHash('sha256').update(bytes).digest('hex')
+  const uploaded=await fetch(target,{method:'POST',headers:{'Content-Type':'application/pdf'},body:bytes,redirect:'error',cache:'no-store',signal:AbortSignal.timeout(20000)})
+  if(!uploaded.ok)return response(502)
+  const result=await uploaded.json() as {storageId?:unknown}
+  if(typeof result.storageId!=='string'||result.storageId.length>128)return response(502)
+  // Server-only upload URL and storage ID. Failed registration leaves a private orphan for reconciliation.
+  await bridge.fetchAuthMutation(api.documents.completeUpload,{roomId:roomId as Id<'rooms'>,titleFr,titleEn,category,storageId:result.storageId as Id<'_storage'>,sha256,sizeBytes:bytes.length,secret})
   return response(201,true)
  }catch{return response(400)}
 }

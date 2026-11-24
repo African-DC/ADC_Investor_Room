@@ -2,7 +2,7 @@
 ## Isolated staging setup
 - [ ] ADC-owned Convex dev deployment; regenerate bindings, set backend flags/secrets only in isolated environment; verify team and deployment IDs.
 - [ ] Resend verified sender and test inboxes; disable link tracking for auth, verify anti-replay, scanner confirmation, session expiry/revocation, CSRF.
-- [ ] Private R2 bucket and separate least-privilege read/write credentials, backup and restore exercise, orphan inventory. No real data during staging.
+- [ ] Convex File Storage, separate upload/delivery secrets, one-use read tickets, backup and restore exercise, orphan inventory. No R2. No real data during staging.
 - [ ] Configure and test external malware scanning with signed/verified verdicts bound to exact SHA-256; manual operator scan labels are not evidence of scanner integration.
 - [ ] MFA with session-bound proof on every privileged call; do not treat verified email or an admin membership as MFA. Staging flags must remain off in production. Vercel production server refuses staging admin and upload even if flags were set, but Convex requires independent environment isolation.
 - [ ] Provision two distinct test admin identities and scoped test investor; verify cross-room, direct IDs, NDA change, revocation, no-store, publication, upload, PDF reader, archive and dependent metrics. Include negative and positive tests using real providers.
@@ -25,4 +25,4 @@ No live providers tested, no actual MFA or antivirus integration, no production 
 ## Authentication design caveat
 Better Auth's built-in two-factor plugin does not automatically gate passwordless magic-link sign-in. A user-level twoFactorEnabled flag is not a verified step-up. Keep the admin surface staging-only until a separately tested session-bound step-up and enrollment/recovery/revocation flow exists. Reference: https://better-auth.com/docs/plugins/2fa and https://labs.convex.dev/better-auth/security. Never add a passwordless bypass or accept client-provided MFA proof.
 
-Lockfile captured from successful GitHub Actions run 45503554994, exact manifest verified, registry URLs checked. CI now uses npm ci exclusively; full locked CI still to verify and dependency advisories/security review remain mandatory. npm chosen for this initial release to match existing CI; pnpm migration is a separate change, not two competing lockfiles.
+Lockfile captured from successful GitHub Actions run 45503554994, exact manifest verified, registry URLs checked. CI now uses npm ci exclusively; locked CI passed at 172448b and dependency advisories/security review remain mandatory. npm chosen for this initial release to match existing CI; pnpm migration is a separate change, not two competing lockfiles.
