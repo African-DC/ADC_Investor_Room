@@ -18,3 +18,6 @@ See docs/FINANCE_SETUP.md. Evidence-linked metrics, separate review, admin edito
 
 ## E09 content
 Eleven bilingual editorial templates in the CMS. Only heading/category/slug/order are prefilled. All facts, sources and content require ADC review; nothing seeded or published automatically.
+
+## Document upload staging
+See docs/DOCUMENT_SETUP.md; bounded PDF upload and distinct reviewer publication, external scan required. All flags default off. Real infrastructure and scanner unverified.

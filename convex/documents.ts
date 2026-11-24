@@ -3,6 +3,9 @@ import type { QueryCtx,MutationCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { v } from 'convex/values'
 import { identity,grantsFor,acceptance } from './portal'
+import { internal } from './_generated/api'
+import { admin } from './admin'
+import { validUpload } from '../src/features/documents/uploadRules'
 import { permits } from './lib/roomPolicy'
 const maxSize=20*1024*1024
 function enabled(){return process.env.ADC_CONVEX_PORTAL_ENABLED==='true'&&process.env.ADC_CONVEX_DOCUMENTS_ENABLED==='true'}
@@ -72,4 +75,32 @@ export const grant=internalMutation({args:{roomId:v.id('rooms'),documentId:v.id(
  if(!d||d.roomId!==a.roomId||a.expiresAt!==undefined&&(!Number.isFinite(a.expiresAt)||a.expiresAt<=Date.now()))throw Error('Invalid scope')
  const id=await ctx.db.insert('accessGrants',{roomId:a.roomId,authUserId:validateText(a.authUserId,200),capability:a.capability,resourceId:d._id,effect:a.effect,expiresAt:a.expiresAt})
  await ctx.db.insert('auditLogs',{actorId:actor,event:'staging.document.grant',resourceId:id,at:Date.now()});return id
+}})
+
+function uploadEnabled(secret:string){
+ const expected=process.env.ADC_DOCUMENT_UPLOAD_SECRET
+ return process.env.ADC_CONVEX_UPLOAD_ENABLED==='true'&&!!expected&&expected.length>=32&&secret===expected
+}
+export const authorizeUpload=query({args:{roomId:v.id('rooms'),secret:v.string()},handler:async(ctx,a)=>{
+ if(!uploadEnabled(a.secret))return false
+ try{await admin(ctx,a.roomId,'content:edit');return !!await ctx.db.get(a.roomId)}catch{return false}
+}})
+export const completeUpload=mutation({args:{roomId:v.id('rooms'),titleFr:v.string(),titleEn:v.string(),category:v.string(),objectKey:v.string(),sha256:v.string(),sizeBytes:v.number(),secret:v.string()},handler:async(ctx,a):Promise<Id<'documents'>>=>{
+ if(!uploadEnabled(a.secret)||!validUpload(a))throw Error('Unavailable')
+ const {user}=await admin(ctx,a.roomId,'content:edit')
+ return await ctx.runMutation(internal.documents.registerDraft,{roomId:a.roomId,titleFr:a.titleFr,titleEn:a.titleEn,category:a.category,objectKey:a.objectKey,sha256:a.sha256,sizeBytes:a.sizeBytes,operatorId:user._id})
+}})
+export const adminPublish=mutation({args:{roomId:v.id('rooms'),documentId:v.id('documents')},handler:async(ctx,a):Promise<{ok:boolean}>=>{
+ const {user}=await admin(ctx,a.roomId,'content:review')
+ const d=await ctx.db.get(a.documentId);if(!d||d.roomId!==a.roomId)throw Error('Unavailable')
+ await ctx.runMutation(internal.documents.publish,{documentId:a.documentId,operatorId:user._id});return {ok:true}
+}})
+export const adminArchive=mutation({args:{roomId:v.id('rooms'),documentId:v.id('documents')},handler:async(ctx,a)=>{
+ const {user}=await admin(ctx,a.roomId,'content:review')
+ const d=await ctx.db.get(a.documentId)
+ if(!d||d.roomId!==a.roomId||d.status!=='published'||!d.currentVersionId)throw Error('Unavailable')
+ const version=await ctx.db.get(d.currentVersionId)
+ if(!version||version.documentId!==d._id||version.roomId!==a.roomId)throw Error('Unavailable')
+ await ctx.db.patch(d._id,{status:'archived'});await ctx.db.patch(version._id,{state:'archived'})
+ await ctx.db.insert('auditLogs',{actorId:user._id,event:'document.archived',resourceId:d._id,at:Date.now()});return {ok:true}
 }})

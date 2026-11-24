@@ -74,7 +74,7 @@ export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>
   const rows=await ctx.db.query('documents').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(101)
   if(rows.length>100)throw Error('Pagination required')
   for(const document of rows){const version=document.currentVersionId?await ctx.db.get(document.currentVersionId):null
-   documents.push({id:document._id,titleFr:document.titleFr,titleEn:document.titleEn,category:document.category,status:document.status,version:version&&version.roomId===a.roomId&&version.documentId===document._id?{id:version._id,number:version.version,scanStatus:version.scanStatus,sizeBytes:version.sizeBytes}:null})
+   documents.push({id:document._id,titleFr:document.titleFr,titleEn:document.titleEn,category:document.category,status:document.status,version:version&&version.roomId===a.roomId&&version.documentId===document._id?{id:version._id,number:version.version,scanStatus:version.scanStatus,sizeBytes:version.sizeBytes,own:version.authorId===user._id}:null})
   }
  }
  return {room:{id:room._id,name:room.name,status:room.status},capabilities,applicants,sections,documents}
