@@ -21,3 +21,5 @@ Eleven bilingual editorial templates in the CMS. Only heading/category/slug/orde
 
 ## Document upload staging
 See docs/DOCUMENT_SETUP.md; bounded PDF upload and distinct reviewer publication, external scan required. All flags default off. Real infrastructure and scanner unverified.
+
+Embedded PDF.js reader uses local worker, bounded canvas rendering and personalized visual watermark; no DRM, no range or accessible text layer yet. See DOCUMENT_SETUP.md.
