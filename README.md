@@ -9,3 +9,6 @@ Premier scaffold E01 et aperçu public E02/E03. Aucune soumission ni session ré
 See [docs/AUTH_SETUP.md](docs/AUTH_SETUP.md). Feature flags off by default, no credentials configured. First CI: build/typecheck/lint and 11 unit tests passed; wizard browser test failed and a regression fix is included in this revision. Real mail and session tests pending. Private routes remain closed.
 
 Verified access page includes optional profile save via Convex with same-origin protection; no real provider configured or verified.
+
+## E05–E07 progress
+Protected investor portal, explicit room/section grants, versioned NDA and staging-only CMS operator mutations are implemented. See docs/PORTAL_SETUP.md. ADC_PORTAL_ENABLED and ADC_STAGING_CMS default off. No real authenticated test or production admin access; staging configuration and CI required.

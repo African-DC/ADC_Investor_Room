@@ -9,3 +9,6 @@ R2 privé séparé par env, métadonnées et hash, quarantaine et contrôle type
 Versions candidates issues du stack du dépôt James10192/vatel-restaurant-os; non validées ici. npm local ne résout pas registry.npmjs.org; aucun lockfile fabriqué. Épingler lockfile pnpm après installation vérifiée. CI bootstrap npm provisoire, à durcir. Intégrations Convex/Better Auth/R2/Resend non provisionnées et non testées. Routes privées actuellement fermées; aucun faux auth ou envoi. Les modules ne seront ouverts qu'après tests E04/E05. Aucun déploiement.
 ## E04 spike
 See AUTH_SETUP.md. Better Auth/Convex/Resend code candidate now present, disabled by default. Provisioning, codegen, live verification and MFA are pending. Initial E01 browser failure is being addressed; do not treat as released.
+
+## E05–E07 spike
+See PORTAL_SETUP.md. Investor portal now queries Convex after verified identity and explicit grants; section revisions are projected only when published. Staging-only internal operator commands are intentionally not a production admin API; no MFA evidence yet. Keep default flags off.
