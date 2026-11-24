@@ -43,3 +43,5 @@ See docs/INTELLIGENCE_SETUP.md. Live ACL-filtered evidence retrieval and optiona
 
 ## Recette réelle
 Follow [staging runbook](docs/STAGING_RUNBOOK.md) and [release gates](docs/RELEASE_CHECKLIST.md). No real provider has been provisioned. Passwordless login is not MFA; production administration remains disabled.
+
+Verified access requests can now enter the CRM without auto-granting any access. See PORTAL_SETUP.md.

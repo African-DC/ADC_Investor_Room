@@ -9,3 +9,5 @@ No production deployment or secrets committed. Start from the reviewed PR SHA, n
 7. Record exact commit SHA, test actor IDs (not passwords/tokens), expected/actual results, provider project IDs, defect owner and decision. Keep MFA, live scanner, real provider tests, dependency review, backups and content reconciliation as mandatory gates. Do not merge/deploy based on code coverage alone.
 8. Before any production release, require session-bound admin MFA, security review and human release approval; remove staging-only admin flags. Never reuse staging CMS operator-label shortcuts in production.
 See RELEASE_CHECKLIST.md, DOCUMENT_SETUP.md, PORTAL_SETUP.md, FINANCE_SETUP.md, CRM_SETUP.md, QA_SETUP.md, ANALYTICS_SETUP.md, GITHUB_REPORTING.md, INTELLIGENCE_SETUP.md.
+
+For self-service intake, configure exact published test room ID and enable both intake flags. Use a verified synthetic applicant; click Request access twice and confirm one roomApplicants link, zero grants, no investor content before admin approval. Test profile reload with optional fields and no intake enabled.
