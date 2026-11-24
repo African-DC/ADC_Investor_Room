@@ -13,7 +13,7 @@ async function boundedBody(request:Request){
 }
 export async function uploadDocument(request:Request){
  const bridge=getAuthBridge(),secret=process.env.ADC_DOCUMENT_UPLOAD_SECRET,origin=process.env.ADC_APP_ORIGIN
- if(!bridge||process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.ADC_UPLOAD_ENABLED!=='true'||!secret||secret.length<32||!origin||request.headers.get('origin')!==origin)return response(404)
+ if(!bridge||(process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.VERCEL_ENV==='production')||process.env.ADC_UPLOAD_ENABLED!=='true'||!secret||secret.length<32||!origin||request.headers.get('origin')!==origin)return response(404)
  const roomId=new URL(request.url).searchParams.get('roomId')
  const contentType=request.headers.get('content-type')??'',length=Number(request.headers.get('content-length'))
  if(!roomId||roomId.length>128||!contentType.startsWith('multipart/form-data;')||!Number.isSafeInteger(length)||length<1||length>MAX_REQUEST)return response(400)

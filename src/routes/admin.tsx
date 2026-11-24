@@ -12,7 +12,7 @@ const search=z.object({roomId:z.string().max(128).optional()})
 const load=createServerFn({method:'GET'}).validator(search).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge()
- if(!bridge||process.env.ADC_STAGING_ADMIN_UI!=='true')return null
+ if(!bridge||(process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.VERCEL_ENV==='production'))return null
  try{
   const identity=await bridge.fetchAuthQuery(api.admin.rooms,{})
   if(!identity)return null
@@ -25,7 +25,7 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
 const command=createServerFn({method:'POST'}).validator(adminCommand).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge(),origin=process.env.ADC_APP_ORIGIN
- if(!bridge||process.env.ADC_STAGING_ADMIN_UI!=='true'||!origin||getRequestHeader('origin')!==origin)return {ok:false}
+ if(!bridge||(process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.VERCEL_ENV==='production')||!origin||getRequestHeader('origin')!==origin)return {ok:false}
  const roomId=data.roomId as Id<'rooms'>
  try{
   switch(data.kind){
