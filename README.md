@@ -31,3 +31,6 @@ See docs/CRM_SETUP.md for scoped pipeline, contacts and internal follow-up. Stag
 
 ## E12 Q&A
 See docs/QA_SETUP.md. Private room/owner-scoped questions and answers with staging admin reply capability. Flags off; no notifications or real data.
+
+## E13 engagement
+Consent-gated, deduplicated and scoped daily engagement, aggregate dashboard, manual bounded retention purge. See docs/ANALYTICS_SETUP.md.

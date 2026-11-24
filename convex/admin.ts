@@ -7,7 +7,7 @@ import { authComponent } from './auth'
 import { hasAdminCapability } from './lib/adminPolicy'
 import type { AdminCapability } from './lib/adminPolicy'
 import { v } from 'convex/values'
-const cap=v.union(v.literal('investors:read'),v.literal('access:manage'),v.literal('content:edit'),v.literal('content:review'),v.literal('finance:edit'),v.literal('finance:review'),v.literal('crm:read'),v.literal('crm:edit'),v.literal('qa:read'),v.literal('qa:reply'))
+const cap=v.union(v.literal('investors:read'),v.literal('access:manage'),v.literal('content:edit'),v.literal('content:review'),v.literal('finance:edit'),v.literal('finance:review'),v.literal('crm:read'),v.literal('crm:edit'),v.literal('qa:read'),v.literal('qa:reply'),v.literal('analytics:read'))
 function enabled(){return process.env.ADC_STAGING_ADMIN_UI==='true'&&process.env.ADC_STAGING_CMS==='true'}
 export async function admin(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,capability?:AdminCapability){
  if(!enabled())throw new Error('Unavailable')

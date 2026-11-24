@@ -6,6 +6,7 @@ import { identity,grantsFor,acceptance } from './portal'
 import { internal } from './_generated/api'
 import { admin } from './admin'
 import { validUpload } from '../src/features/documents/uploadRules'
+import { recordAuthorized } from './analytics'
 import { permits } from './lib/roomPolicy'
 const maxSize=20*1024*1024
 function enabled(){return process.env.ADC_CONVEX_PORTAL_ENABLED==='true'&&process.env.ADC_CONVEX_DOCUMENTS_ENABLED==='true'}
@@ -50,6 +51,7 @@ export const authorizeDelivery=mutation({args:{roomId:v.id('rooms'),documentId:v
  const result=await versionFor(ctx,a.documentId,a.roomId)
  if(!result)return null
  await ctx.db.insert('auditLogs',{actorId:scope.user._id,event:a.download?'document.download_authorized':'document.view_authorized',resourceId:result.version._id,at:scope.now})
+ await recordAuthorized(ctx,a.roomId,scope.user._id,a.download?'document_download_authorized':'document_view_authorized',a.documentId)
  return {objectKey:result.version.objectKey,sha256:result.version.sha256,sizeBytes:result.version.sizeBytes,mime:result.version.mime}
 }})
 export const registerDraft=internalMutation({args:{roomId:v.id('rooms'),titleFr:v.string(),titleEn:v.string(),category:v.string(),objectKey:v.string(),sha256:v.string(),sizeBytes:v.number(),operatorId:v.string()},handler:async(ctx,a)=>{

@@ -19,7 +19,7 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   const room=data.roomId?identity.rooms.find(r=>r.id===data.roomId):identity.rooms[0]
   if(!room)return null
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
-  const metrics=await bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id});const contacts=await bridge.fetchAuthQuery(api.crm.list,{roomId:room.id});const questions=await bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id});return {identity,dashboard:{...dashboard,metrics,contacts,questions,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true'}}
+  const metrics=await bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id});const contacts=await bridge.fetchAuthQuery(api.crm.list,{roomId:room.id});const questions=await bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id});const analytics=await bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30});return {identity,dashboard:{...dashboard,metrics,contacts,questions,analytics,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true'}}
  }catch{return null}
 })
 const command=createServerFn({method:'POST'}).validator(adminCommand).handler(async({data})=>{

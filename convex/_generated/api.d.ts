@@ -5,10 +5,11 @@ import type * as documents from '../documents.js'
 import type * as finance from '../finance.js'
 import type * as crm from '../crm.js'
 import type * as qa from '../qa.js'
+import type * as analytics from '../analytics.js'
 import type * as admin from '../admin.js'
 import type * as stagingCms from '../stagingCms.js'
 import type { ApiFromModules,FilterApi,FunctionReference } from 'convex/server'
-declare const fullApi:ApiFromModules<{investors:typeof investors;portal:typeof portal;stagingCms:typeof stagingCms;admin:typeof admin;documents:typeof documents;finance:typeof finance;crm:typeof crm;qa:typeof qa}>
+declare const fullApi:ApiFromModules<{investors:typeof investors;portal:typeof portal;stagingCms:typeof stagingCms;admin:typeof admin;documents:typeof documents;finance:typeof finance;crm:typeof crm;qa:typeof qa;analytics:typeof analytics}>
 export declare const api:FilterApi<typeof fullApi,FunctionReference<'query'|'mutation'|'action','public'>>
 export declare const internal:FilterApi<typeof fullApi,FunctionReference<'query'|'mutation'|'action','internal'>>
 export declare const components:{betterAuth:import('@convex-dev/better-auth/_generated/component.js').ComponentApi<'betterAuth'>}
