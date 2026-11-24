@@ -9,8 +9,8 @@
     "dev": "vite dev --port 3000",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src tests vite.config.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p convex",
+    "lint": "eslint src convex tests vite.config.ts",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
@@ -24,7 +24,10 @@
     "zod": "4.6.7",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.0.2",
-    "lucide-react": "^0.577.0"
+    "lucide-react": "^0.577.0",
+    "convex": "^1.32.0",
+    "@convex-dev/better-auth": "^0.13.1",
+    "better-auth": "~1.7.26"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",
