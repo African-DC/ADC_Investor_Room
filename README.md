@@ -40,3 +40,6 @@ Allowlisted metadata snapshots and reviewed CMS draft, staging only. See docs/GI
 
 ## E15 ADC Intelligence
 See docs/INTELLIGENCE_SETUP.md. Live ACL-filtered evidence retrieval and optional Vercel AI SDK structured selection; no generated financial claims. Default off.
+
+## Recette réelle
+Follow [staging runbook](docs/STAGING_RUNBOOK.md) and [release gates](docs/RELEASE_CHECKLIST.md). No real provider has been provisioned. Passwordless login is not MFA; production administration remains disabled.

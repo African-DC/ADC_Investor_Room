@@ -21,3 +21,6 @@ No live providers tested, no actual MFA or antivirus integration, no production 
 - [ ] Analytics: approve privacy notice, verify opt-in and withdrawal, purge throughput and deletion requests; distinguish authorization from delivery.
 - [ ] Technical reporting: configure least-privilege read-only GitHub credential and exact room targets; test rate limits, failures and CMS review.
 - [ ] ADC Intelligence: default off. Verify actual provider and contractual data handling, approve exact source versions, test cross-room and stale citation rejection, adversarial questions, cost limits, finance accuracy and human fallback. No external real data until approval; model cannot emit freeform answers in current slice.
+
+## Authentication design caveat
+Better Auth's built-in two-factor plugin does not automatically gate passwordless magic-link sign-in. A user-level twoFactorEnabled flag is not a verified step-up. Keep the admin surface staging-only until a separately tested session-bound step-up and enrollment/recovery/revocation flow exists. Reference: https://better-auth.com/docs/plugins/2fa and https://labs.convex.dev/better-auth/security. Never add a passwordless bypass or accept client-provided MFA proof.
