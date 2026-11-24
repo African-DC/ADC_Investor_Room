@@ -1,3 +1,4 @@
+import { Input } from '@ui-sdk/react/input'
 import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import { ArrowRight, ArrowLeft, LockKeyhole, Mail, Globe2 } from 'lucide-react'
@@ -42,7 +43,7 @@ export function Welcome(){
   if(result&&!result.success){setErrors(result.error.issues.map(i=>String(i.path[0])));return}
   setErrors([]);setStep(s=>Math.min(4,s+1))
  }
- function field(key:Exclude<keyof Profile,'type'>,label:string,type='text',required=false){return <label className="field" key={key}>{label}{required?' *':<small> · {t.optional}</small>}<input type={type} required={required} autoComplete={key==='name'?'name':key==='email'?'email':key==='organization'?'organization':key==='phone'?'tel':'off'} aria-invalid={errors.includes(key)} maxLength={key==='email'?254:key==='linkedin'?300:key==='phone'?40:key==='name'?120:160} value={profile[key]} onChange={e=>update(key,e.target.value)}/></label>}
+ function field(key:Exclude<keyof Profile,'type'>,label:string,type='text',required=false){return <label className="field" key={key}>{label}{required?' *':<small> · {t.optional}</small>}<Input type={type} required={required} autoComplete={key==='name'?'name':key==='email'?'email':key==='organization'?'organization':key==='phone'?'tel':'off'} aria-invalid={errors.includes(key)} maxLength={key==='email'?254:key==='linkedin'?300:key==='phone'?40:key==='name'?120:160} value={profile[key]} onValueChange={value=>update(key,value)}/></label>}
  return <main className="welcome-shell">
   <header><img className="brand" src="/adc-logo.png" alt="African Digit Consulting"/><button className="language" onClick={()=>setLang(l=>l==='fr'?'en':'fr')} aria-label="Change language"><Globe2 size={16}/>{lang==='fr'?'EN':'FR'}</button></header>
   <div className="stage"><section className="intro"><p className="eyebrow">{t.private}</p><div className="accent"/><h1>{t.welcome}</h1><p className="tagline">{t.tag}</p><p className="description">{t.description}</p><div className="confidential"><LockKeyhole size={16}/>{enabled?(lang==='fr'?'Espace privé · Accès contrôlé':'Private space · Controlled access'):t.privacy}</div></section>

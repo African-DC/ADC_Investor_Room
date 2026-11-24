@@ -1,5 +1,6 @@
 import { useEffect,useRef,useState } from 'react'
-import { Building2,LockKeyhole,Search,ArrowRight,LogOut,Globe2,FileText,RefreshCw } from 'lucide-react'
+import { Building2,LockKeyhole,ArrowRight,LogOut,Globe2,FileText,RefreshCw } from 'lucide-react'
+import { SearchField } from '../../components/ui/SearchField'
 import { authClient } from '../../lib/auth-client'
 type Section={id:string;titleFr:string;titleEn:string;bodyFr:string;bodyEn:string;category:string;order:number;publishedAt:number}
 export type Overview={name:string;rooms:{id:string;name:string}[];room:{id:string;name:string}|null;nda:{version:string;textFr:string;textEn:string}|null;sections:Section[]}
@@ -14,7 +15,7 @@ export function InvestorRoom({initial,refresh,acceptNda}:{initial:Overview;refre
  // Recheck authorization periodically and on window focus. Clear the rendered content on failure.
  useEffect(()=>{
   let alive=true
-  async function load(){const token=++sequence.current;try{const next=await refresh(roomId);if(alive&&token===sequence.current)setData(next)}catch{if(alive&&token===sequence)setData(null)}}
+  async function load(){const token=++sequence.current;try{const next=await refresh(roomId);if(alive&&token===sequence.current)setData(next)}catch{if(alive&&token===sequence.current)setData(null)}}
   const timer=window.setInterval(()=>void load(),30000)
   const focus=()=>void load()
   window.addEventListener('focus',focus)
@@ -35,7 +36,7 @@ export function InvestorRoom({initial,refresh,acceptNda}:{initial:Overview;refre
    {error&&<p role="alert" className="error">{t.error}</p>}
    <section className="room-intro"><p className="eyebrow">{t.private}</p><h1>{t.welcome}, {data.name}</h1><p>{data.room?.name??'African Digit Consulting'}</p></section>
    {!data.room?<section className="room-card"><LockKeyhole/><p>{t.noRoom}</p></section>:data.nda?<section className="room-card"><h2>{t.nda}</h2><p className="eyebrow">{data.nda.version}</p><div className="room-body nda-text">{lang==='fr'?data.nda.textFr:data.nda.textEn}</div><label className="nda-agree"><input type="checkbox" checked={agreed} onChange={e=>setAgreedVersion(e.target.checked?data.nda?.version??null:null)}/>{t.agree}</label><button className="primary" disabled={!agreed||busy} onClick={()=>void approve()}>{t.continue}<ArrowRight size={18}/></button></section>:<>
-    <label className="room-search"><Search size={18}/><input aria-label={t.search} placeholder={t.search} value={search} onChange={e=>{setSearch(e.target.value);setActive(null)}}/></label>
+    <SearchField label={t.search} clearLabel={lang==='fr'?'Effacer la recherche':'Clear search'} value={search} onChange={v=>{setSearch(v);setActive(null)}}/>
     {selected?<article className="room-card"><p className="eyebrow">{selected.category}</p><h2>{title(selected)}</h2><div className="room-body">{body(selected)}</div><p className="room-date">{t.published} {new Intl.DateTimeFormat(lang,{dateStyle:'medium',timeZone:'UTC'}).format(selected.publishedAt)}</p></article>:visible.length?<div className="room-grid">{visible.map(s=><button className="room-card section-card" key={s.id} onClick={()=>setActive(s.id)}><FileText size={20}/><p className="eyebrow">{s.category}</p><h2>{title(s)}</h2><p>{body(s).slice(0,160)}{body(s).length>160?'…':''}</p><ArrowRight size={18}/></button>)}</div>:<section className="room-card"><p>{search?t.none:t.empty}</p></section>}
    </>}
   </main>
