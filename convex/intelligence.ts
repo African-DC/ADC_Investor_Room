@@ -14,7 +14,7 @@ async function access(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,userId:string)
  const grants=await grantsFor(ctx,userId,roomId),nda=await acceptance(ctx,userId,roomId,room.ndaVersion)
  return permits(userId,room,grants,Date.now(),'room:read',undefined,nda)?{room,grants,nda}:null
 }
-export async function retrieveForIdentity(ctx:QueryCtx,roomId:Id<'rooms'>,userId:string,question:string,lang:'fr'|'en'){
+export async function retrieveForIdentity(ctx:QueryCtx,roomId:Id<'rooms'>,userId:string,question:string,lang:'fr'|'en',includeFinance:boolean){
  const scope=await access(ctx,roomId,userId);if(!scope)return null
  const approved=new Set((process.env.ADC_AI_APPROVED_VERSIONS??'').split(',').map(s=>s.trim()).filter(Boolean))
  const rows=await ctx.db.query('sections').withIndex('by_room',q=>q.eq('roomId',roomId)).take(101)
@@ -28,7 +28,7 @@ export async function retrieveForIdentity(ctx:QueryCtx,roomId:Id<'rooms'>,userId
   if(!p||!version)continue
   for(const [i,text] of chunks(lang==='fr'?p.bodyFr:p.bodyEn).entries())candidates.push({key:version._id+':'+i,sectionId:section._id,version:version._id,title:lang==='fr'?p.titleFr:p.titleEn,text,kind:'section',externalApproved:approved.has(version._id)})
  }
- if(process.env.ADC_CONVEX_FINANCE_ENABLED==='true'){
+ if(includeFinance&&process.env.ADC_CONVEX_FINANCE_ENABLED==='true'){
   for(const m of await publishedForIdentity(ctx,userId,roomId)){
    const title=labels[m.kind][lang==='fr'?0:1]
    candidates.push({key:m.id,sectionId:m.sectionId,version:m.id,title,text:title+' · '+m.scope+' · '+m.periodStart+' — '+m.periodEnd+' : '+formatMetric(m.value,m.unit,lang)+' · '+(lang==='fr'?m.definitionFr:m.definitionEn),kind:'metric',externalApproved:false})
@@ -36,9 +36,9 @@ export async function retrieveForIdentity(ctx:QueryCtx,roomId:Id<'rooms'>,userId
  }
  return rank(question,candidates)
 }
-export const sources=query({args:{roomId:v.id('rooms'),question:v.string(),lang:v.union(v.literal('fr'),v.literal('en'))},handler:async(ctx,a)=>{
+export const sources=query({args:{roomId:v.id('rooms'),question:v.string(),lang:v.union(v.literal('fr'),v.literal('en')),includeFinance:v.boolean()},handler:async(ctx,a)=>{
  if(!enabled()||a.question.length>600||!a.question.trim())return null
- const user=await identity(ctx);return user?retrieveForIdentity(ctx,a.roomId,user._id,a.question,a.lang):null
+ const user=await identity(ctx);return user?retrieveForIdentity(ctx,a.roomId,user._id,a.question,a.lang,a.includeFinance):null
 }})
 async function consume(ctx:MutationCtx,roomId:Id<'rooms'>,userId:string){
  if(!await access(ctx,roomId,userId))return {ok:false,limit:false}

@@ -49,7 +49,7 @@ const askIntelligence=createServerFn({method:'POST'}).validator(z.object({roomId
  const bridge=getAuthBridge(),origin=process.env.ADC_APP_ORIGIN
  const unavailable:Answer={status:'unavailable',sources:[]},empty:Answer={status:'no_evidence',sources:[]}
  if(!bridge||!origin||getRequestHeader('origin')!==origin||process.env.ADC_PORTAL_ENABLED!=='true'||process.env.ADC_AI_ENABLED!=='true')return unavailable
- const roomId=data.roomId as Id<'rooms'>,args={roomId,question:data.question,lang:data.lang}
+ const roomId=data.roomId as Id<'rooms'>,args={roomId,question:data.question,lang:data.lang,includeFinance:process.env.ADC_FINANCE_ENABLED==='true'}
  try{
   const quota=await bridge.fetchAuthMutation(api.intelligence.quota,{roomId})
   if(!quota.ok)return quota.limit?{status:'limit',sources:[]}:unavailable
