@@ -7,9 +7,9 @@ import { authComponent } from './auth'
 import { hasAdminCapability } from './lib/adminPolicy'
 import type { AdminCapability } from './lib/adminPolicy'
 import { v } from 'convex/values'
-const cap=v.union(v.literal('investors:read'),v.literal('access:manage'),v.literal('content:edit'),v.literal('content:review'))
+const cap=v.union(v.literal('investors:read'),v.literal('access:manage'),v.literal('content:edit'),v.literal('content:review'),v.literal('finance:edit'),v.literal('finance:review'))
 function enabled(){return process.env.ADC_STAGING_ADMIN_UI==='true'&&process.env.ADC_STAGING_CMS==='true'}
-async function admin(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,capability?:AdminCapability){
+export async function admin(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,capability?:AdminCapability){
  if(!enabled())throw new Error('Unavailable')
  const user=await authComponent.safeGetAuthUser(ctx)
  if(!user?.emailVerified)throw new Error('Unauthorized')
@@ -60,7 +60,7 @@ export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>
   }
  }
  const sections=[]
- if(capabilities.includes('content:edit')||capabilities.includes('content:review')||capabilities.includes('access:manage')){
+ if(capabilities.includes('content:edit')||capabilities.includes('content:review')||capabilities.includes('access:manage')||capabilities.includes('finance:edit')||capabilities.includes('finance:review')){
   const rows=await ctx.db.query('sections').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(101)
   if(rows.length>100)throw new Error('Pagination required')
   for(const section of rows){
@@ -70,11 +70,11 @@ export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>
   }
  }
  const documents=[]
- if(capabilities.includes('content:edit')||capabilities.includes('content:review')||capabilities.includes('access:manage')){
+ if(capabilities.includes('content:edit')||capabilities.includes('content:review')||capabilities.includes('access:manage')||capabilities.includes('finance:edit')||capabilities.includes('finance:review')){
   const rows=await ctx.db.query('documents').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(101)
   if(rows.length>100)throw Error('Pagination required')
   for(const document of rows){const version=document.currentVersionId?await ctx.db.get(document.currentVersionId):null
-   documents.push({id:document._id,titleFr:document.titleFr,titleEn:document.titleEn,category:document.category,status:document.status,version:version&&version.roomId===a.roomId&&version.documentId===document._id?{number:version.version,scanStatus:version.scanStatus,sizeBytes:version.sizeBytes}:null})
+   documents.push({id:document._id,titleFr:document.titleFr,titleEn:document.titleEn,category:document.category,status:document.status,version:version&&version.roomId===a.roomId&&version.documentId===document._id?{id:version._id,number:version.version,scanStatus:version.scanStatus,sizeBytes:version.sizeBytes}:null})
   }
  }
  return {room:{id:room._id,name:room.name,status:room.status},capabilities,applicants,sections,documents}

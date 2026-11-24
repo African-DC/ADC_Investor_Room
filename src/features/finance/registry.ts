@@ -1,0 +1,10 @@
+export const kinds=['invoiced','collected','recognized_revenue','arr','forecast','paying_accounts','paying_sites','pilot_sites','active_users','fundraise_target','fund_use'] as const
+export type Kind=typeof kinds[number]
+export const countKinds:readonly Kind[]=['paying_accounts','paying_sites','pilot_sites','active_users']
+export const labels:Record<Kind,[string,string]>={invoiced:['Factures émises','Invoiced'],collected:['Encaissements','Cash collected'],recognized_revenue:['CA comptable','Recognized revenue'],arr:['ARR','Annual recurring revenue'],forecast:['Prévision','Forecast'],paying_accounts:['Comptes payants','Paying accounts'],paying_sites:['Sites payants','Paying sites'],pilot_sites:['Sites pilotes','Pilot sites'],active_users:['Utilisateurs actifs','Active users'],fundraise_target:['Objectif de levée','Fundraising target'],fund_use:['Utilisation des fonds','Use of funds']}
+export const unitFor=(kind:Kind)=>countKinds.includes(kind)?'count' as const:'XOF' as const
+export function validDate(s:string){if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const d=new Date(s+'T00:00:00Z');return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===s}
+export function validMetric(m:{kind:Kind;unit:string;value:number;periodStart:string;periodEnd:string;scope:string;definitionFr:string;definitionEn:string;evidenceVersionIds:readonly string[]}){
+ return kinds.includes(m.kind)&&m.unit===unitFor(m.kind)&&Number.isSafeInteger(m.value)&&(!countKinds.includes(m.kind)||m.value>=0)&&validDate(m.periodStart)&&validDate(m.periodEnd)&&m.periodStart<=m.periodEnd&&m.scope.trim().length>0&&m.scope.length<=120&&m.definitionFr.trim().length>0&&m.definitionFr.length<=2000&&m.definitionEn.trim().length>0&&m.definitionEn.length<=2000&&m.evidenceVersionIds.length>0&&m.evidenceVersionIds.length<=10&&new Set(m.evidenceVersionIds).size===m.evidenceVersionIds.length
+}
+export function formatMetric(value:number,unit:'XOF'|'count',lang:'fr'|'en'){return new Intl.NumberFormat(lang==='fr'?'fr-FR':'en-GB',{maximumFractionDigits:0}).format(value)+(unit==='XOF'?' FCFA':'')}

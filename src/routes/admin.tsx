@@ -19,7 +19,7 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   const room=data.roomId?identity.rooms.find(r=>r.id===data.roomId):identity.rooms[0]
   if(!room)return null
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
-  return {identity,dashboard}
+  const metrics=await bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id});return {identity,dashboard:{...dashboard,metrics}}
  }catch{return null}
 })
 const command=createServerFn({method:'POST'}).validator(adminCommand).handler(async({data})=>{
@@ -29,6 +29,8 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
  const roomId=data.roomId as Id<'rooms'>
  try{
   switch(data.kind){
+   case 'financeDraft':await bridge.fetchAuthMutation(api.finance.draft,{roomId,sectionId:data.sectionId as Id<'sections'>,kind:data.metricKind,scope:data.scope,periodStart:data.periodStart,periodEnd:data.periodEnd,definitionFr:data.definitionFr,definitionEn:data.definitionEn,value:data.value,unit:data.unit,evidenceVersionIds:data.evidenceVersionIds as Id<'documentVersions'>[]});break
+   case 'financeTransition':await bridge.fetchAuthMutation(api.finance.transition,{roomId,metricId:data.metricId as Id<'financialMetrics'>,action:data.action});break
    case 'grant':await bridge.fetchAuthMutation(api.admin.grant,{roomId,profileId:data.profileId as Id<'investorProfiles'>,capability:data.capability,sectionId:data.sectionId as Id<'sections'>|undefined,effect:data.effect,expiresAt:data.expiresAt});break
    case 'grantDocument':await bridge.fetchAuthMutation(api.admin.grantDocument,{roomId,profileId:data.profileId as Id<'investorProfiles'>,documentId:data.documentId as Id<'documents'>,capability:data.capability,effect:data.effect,expiresAt:data.expiresAt});break
    case 'revoke':await bridge.fetchAuthMutation(api.admin.revoke,{roomId,grantId:data.grantId as Id<'accessGrants'>});break

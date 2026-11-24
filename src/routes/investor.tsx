@@ -12,7 +12,7 @@ const getOverview=createServerFn({method:'GET'}).validator(roomSearch).handler(a
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge()
  if(!bridge||process.env.ADC_PORTAL_ENABLED!=='true')return null
- try{const overview=await bridge.fetchAuthQuery(api.portal.overview,{roomId:data.roomId as Id<'rooms'>|undefined});if(!overview)return null;const documents=overview.room&&!overview.nda&&process.env.ADC_DOCUMENTS_ENABLED==='true'?await bridge.fetchAuthQuery(api.documents.list,{roomId:overview.room.id}):[];return {...overview,documents}}catch{return null}
+ try{const overview=await bridge.fetchAuthQuery(api.portal.overview,{roomId:data.roomId as Id<'rooms'>|undefined});if(!overview)return null;const documents=overview.room&&!overview.nda&&process.env.ADC_DOCUMENTS_ENABLED==='true'?await bridge.fetchAuthQuery(api.documents.list,{roomId:overview.room.id}):[];const metrics=overview.room&&!overview.nda&&process.env.ADC_FINANCE_ENABLED==='true'?await bridge.fetchAuthQuery(api.finance.published,{roomId:overview.room.id}):[];return {...overview,documents,metrics}}catch{return null}
 })
 const accept=createServerFn({method:'POST'}).validator(z.object({roomId:z.string().max(128),version:z.string().max(100),accepted:z.literal(true)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))

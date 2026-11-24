@@ -12,3 +12,6 @@ Verified access page includes optional profile save via Convex with same-origin 
 
 ## E05–E07 progress
 Protected investor portal, explicit room/section grants, versioned NDA and staging-only CMS operator mutations are implemented. See docs/PORTAL_SETUP.md. ADC_PORTAL_ENABLED and ADC_STAGING_CMS default off. No real authenticated test or production admin access; staging configuration and CI required.
+
+## E10 finance registry
+See docs/FINANCE_SETUP.md. Evidence-linked metrics, separate review, admin editor and authorized investor view. No actual figures committed. Real provider setup and MFA remain blockers.
