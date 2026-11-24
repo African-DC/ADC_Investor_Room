@@ -4,6 +4,7 @@ import {convexTest} from 'convex-test'
 import schema from '../convex/schema'
 import {api,internal} from '../convex/_generated/api'
 import {publishedForIdentity} from '../convex/finance'
+import {storePdf} from './storageFixture'
 const modules=import.meta.glob(['../convex/**/*.*s','!../convex/**/*.test.ts'])
 beforeEach(()=>vi.stubEnv('ADC_STAGING_CMS','true'))
 afterEach(()=>vi.unstubAllEnvs())
@@ -15,8 +16,8 @@ it('requires evidence, separates review, replaces exact snapshot and respects se
  const sectionId=await t.run(async ctx=>{const v=await ctx.db.get(version);if(!v)throw Error('fixture');return v.sectionId})
  await t.mutation(internal.stagingCms.submit,{versionId:version,operatorId:'author'})
  await t.mutation(internal.stagingCms.publish,{versionId:version,operatorId:'reviewer'})
- const sha256='a'.repeat(64)
- const documentId=await t.mutation(internal.documents.registerDraft,{roomId,titleFr:'Fixture',titleEn:'Fixture',category:'finance',objectKey:`rooms/${roomId}/${sha256}.pdf`,sha256,sizeBytes:100,operatorId:'author'})
+ const file=await storePdf(t)
+ const documentId=await t.mutation(internal.documents.registerDraft,{roomId,titleFr:'Fixture',titleEn:'Fixture',category:'finance',...file,operatorId:'author'})
  const evidence=await t.run(async ctx=>{const d=await ctx.db.get(documentId);if(!d?.currentVersionId)throw Error('fixture');return d.currentVersionId})
  const args={roomId,sectionId,kind:'invoiced' as const,unit:'XOF' as const,value:100,scope:'Fixture',periodStart:'2026-01-01',periodEnd:'2026-01-31',definitionFr:'Fixture',definitionEn:'Fixture',evidenceVersionIds:[evidence],operatorId:'author'}
  await expect(t.mutation(internal.finance.stagingDraft,args)).rejects.toThrow('Invalid metric or evidence')

@@ -3,16 +3,19 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {convexTest} from 'convex-test'
 import schema from '../convex/schema'
 import {api,internal} from '../convex/_generated/api'
+import {storePdf} from './storageFixture'
 const modules=import.meta.glob(['../convex/**/*.*s','!../convex/**/*.test.ts'])
 beforeEach(()=>vi.stubEnv('ADC_STAGING_CMS','true'))
 afterEach(()=>vi.unstubAllEnvs())
-it('unscanned document cannot publish, requires separate operator, key bound to room',async()=>{
+it('unscanned document cannot publish, requires separate operator, storage hash/size bound, single use',async()=>{
  const t=convexTest(schema,modules)
  const roomId=await t.mutation(internal.stagingCms.createRoom,{name:'Fixture',organizationId:'fixture',operatorId:'author'})
- const sha256='a'.repeat(64)
- const args={roomId,titleFr:'PDF fictif',titleEn:'Fixture PDF',category:'legal',sha256,sizeBytes:100,operatorId:'author'}
- await expect(t.mutation(internal.documents.registerDraft,{...args,objectKey:'wrong/path.pdf'})).rejects.toThrow('Invalid document')
- const documentId=await t.mutation(internal.documents.registerDraft,{...args,objectKey:`rooms/${roomId}/${sha256}.pdf`})
+ const file=await storePdf(t)
+ const args={roomId,titleFr:'PDF fictif',titleEn:'Fixture PDF',category:'legal',operatorId:'author'}
+ await expect(t.mutation(internal.documents.registerDraft,{...args,...file,sha256:'b'.repeat(64)})).rejects.toThrow('Invalid document')
+ await expect(t.mutation(internal.documents.registerDraft,{...args,...file,sizeBytes:file.sizeBytes+1})).rejects.toThrow('Invalid document')
+ const documentId=await t.mutation(internal.documents.registerDraft,{...args,...file})
+ await expect(t.mutation(internal.documents.registerDraft,{...args,...file})).rejects.toThrow('Invalid document')
  const versionId=await t.run(async ctx=>{const d=await ctx.db.get(documentId);if(!d?.currentVersionId)throw Error('Missing fixture');return d.currentVersionId})
  await expect(t.mutation(internal.documents.publish,{documentId,operatorId:'reviewer'})).rejects.toThrow('Publication denied')
  await t.mutation(internal.documents.recordScan,{versionId,status:'clean',operatorId:'scanner'})

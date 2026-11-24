@@ -13,3 +13,4 @@ test-results/
 *.pdf
 *.xlsx
 *.docx
+src/routeTree.gen.ts

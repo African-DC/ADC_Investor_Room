@@ -8,6 +8,7 @@ import { admin } from './admin'
 import { MAX_UPLOAD,validUpload } from '../src/features/documents/uploadRules'
 import { recordAuthorized } from './analytics'
 import { permits } from './lib/roomPolicy'
+import { storageShaMatches } from './lib/hash'
 const maxSize=MAX_UPLOAD
 function enabled(){return process.env.ADC_CONVEX_PORTAL_ENABLED==='true'&&process.env.ADC_CONVEX_DOCUMENTS_ENABLED==='true'}
 function staging(){if(process.env.ADC_STAGING_CMS!=='true')throw Error('Staging disabled')}
@@ -55,11 +56,13 @@ export const authorizeDelivery=mutation({args:{roomId:v.id('rooms'),documentId:v
  await recordAuthorized(ctx,a.roomId,scope.user._id,a.download?'document_download_authorized':'document_view_authorized',a.documentId)
  return {sha256:result.version.sha256,sizeBytes:result.version.sizeBytes,mime:result.version.mime}
 }})
-export const registerDraft=internalMutation({args:{roomId:v.id('rooms'),titleFr:v.string(),titleEn:v.string(),category:v.string(),objectKey:v.string(),sha256:v.string(),sizeBytes:v.number(),operatorId:v.string()},handler:async(ctx,a)=>{
- staging();if(!await ctx.db.get(a.roomId)||!Number.isSafeInteger(a.sizeBytes)||a.sizeBytes<1||a.sizeBytes>maxSize||!/^([a-f0-9]{64})$/.test(a.sha256)||a.objectKey!==`rooms/${a.roomId}/${a.sha256}.pdf`)throw Error('Invalid document')
+// Staging/test-only registration of an object already in Convex File Storage. Integrity is checked against storage metadata.
+export const registerDraft=internalMutation({args:{roomId:v.id('rooms'),titleFr:v.string(),titleEn:v.string(),category:v.string(),storageId:v.id('_storage'),sha256:v.string(),sizeBytes:v.number(),operatorId:v.string()},handler:async(ctx,a)=>{
+ staging();const metadata=await ctx.db.system.get(a.storageId)
+ if(!await ctx.db.get(a.roomId)||!Number.isSafeInteger(a.sizeBytes)||a.sizeBytes<1||a.sizeBytes>maxSize||!/^([a-f0-9]{64})$/.test(a.sha256)||!metadata||metadata.size!==a.sizeBytes||!storageShaMatches(metadata.sha256,a.sha256)||metadata.contentType!=='application/pdf'||await ctx.db.query('documentVersions').withIndex('by_storage',q=>q.eq('storageId',a.storageId)).first())throw Error('Invalid document')
  const actor=validateText(a.operatorId,200)
  const id=await ctx.db.insert('documents',{roomId:a.roomId,titleFr:validateText(a.titleFr,180),titleEn:validateText(a.titleEn,180),category:validateText(a.category,80),status:'draft'})
- const versionId=await ctx.db.insert('documentVersions',{roomId:a.roomId,documentId:id,version:1,objectKey:a.objectKey,sha256:a.sha256,sizeBytes:a.sizeBytes,mime:'application/pdf',scanStatus:'pending',state:'draft',createdAt:Date.now(),authorId:actor})
+ const versionId=await ctx.db.insert('documentVersions',{roomId:a.roomId,documentId:id,version:1,storageId:a.storageId,sha256:a.sha256,sizeBytes:a.sizeBytes,mime:'application/pdf',scanStatus:'pending',state:'draft',createdAt:Date.now(),authorId:actor})
  await ctx.db.patch(id,{currentVersionId:versionId});await ctx.db.insert('auditLogs',{actorId:actor,event:'staging.document.registered',resourceId:id,at:Date.now()});return id
 }})
 // Trusted staging operator records scan verdict from external scanner. No scan is performed here.
@@ -92,7 +95,7 @@ export const completeUpload=mutation({args:{roomId:v.id('rooms'),titleFr:v.strin
  if(!uploadEnabled(a.secret)||!validUpload(a))throw Error('Unavailable')
  const {user}=await admin(ctx,a.roomId,'content:edit')
  const metadata=await ctx.db.system.get(a.storageId)
- if(!metadata||metadata.size!==a.sizeBytes||metadata.sha256!==a.sha256||metadata.contentType!=='application/pdf'||await ctx.db.query('documentVersions').withIndex('by_storage',q=>q.eq('storageId',a.storageId)).first())throw Error('Invalid storage object')
+ if(!metadata||metadata.size!==a.sizeBytes||!storageShaMatches(metadata.sha256,a.sha256)||metadata.contentType!=='application/pdf'||await ctx.db.query('documentVersions').withIndex('by_storage',q=>q.eq('storageId',a.storageId)).first())throw Error('Invalid storage object')
  const id=await ctx.db.insert('documents',{roomId:a.roomId,titleFr:validateText(a.titleFr,180),titleEn:validateText(a.titleEn,180),category:a.category,status:'draft'})
  const versionId=await ctx.db.insert('documentVersions',{roomId:a.roomId,documentId:id,version:1,storageId:a.storageId,sha256:a.sha256,sizeBytes:a.sizeBytes,mime:'application/pdf',scanStatus:'pending',state:'draft',createdAt:Date.now(),authorId:user._id})
  await ctx.db.patch(id,{currentVersionId:versionId})

@@ -3,6 +3,7 @@ import {afterEach,beforeEach,it,expect,vi} from 'vitest'
 import {convexTest} from 'convex-test'
 import schema from '../convex/schema'
 import {api,internal} from '../convex/_generated/api'
+import {storePdf} from './storageFixture'
 const modules=import.meta.glob(['../convex/**/*.*s','!../convex/**/*.test.ts'])
 beforeEach(()=>{vi.stubEnv('ADC_STAGING_CMS','true');vi.stubEnv('ADC_CONVEX_PORTAL_ENABLED','true');vi.stubEnv('ADC_CONVEX_DOCUMENTS_ENABLED','true')})
 afterEach(()=>vi.unstubAllEnvs())
@@ -10,8 +11,9 @@ it('consumes expired or unauthorized tickets once, purges stale tickets and reje
  const t=convexTest(schema,modules)
  const roomId=await t.mutation(internal.stagingCms.createRoom,{name:'Fixture',organizationId:'fixture',operatorId:'author'})
  await t.mutation(internal.stagingCms.setRoomStatus,{roomId,status:'published',operatorId:'author'})
- const sha256='a'.repeat(64),actor='fixture'
- const documentId=await t.mutation(internal.documents.registerDraft,{roomId,titleFr:'Fixture',titleEn:'Fixture',category:'legal',objectKey:`rooms/${roomId}/${sha256}.pdf`,sha256,sizeBytes:100,operatorId:'author'})
+ const actor='fixture'
+ const file=await storePdf(t)
+ const documentId=await t.mutation(internal.documents.registerDraft,{roomId,titleFr:'Fixture',titleEn:'Fixture',category:'legal',...file,operatorId:'author'})
  const versionId=await t.run(async ctx=>{const d=await ctx.db.get(documentId);if(!d?.currentVersionId)throw Error('Fixture');return d.currentVersionId})
  const add=(ticket:string,expiresAt:number)=>t.run(ctx=>ctx.db.insert('documentDeliveryTickets',{ticket,roomId,documentId,versionId,authUserId:actor,download:false,expiresAt}))
  const expired='a'.repeat(64),denied='b'.repeat(64),stale='c'.repeat(64)
