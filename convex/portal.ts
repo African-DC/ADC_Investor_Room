@@ -20,9 +20,8 @@ async function acceptance(ctx:QueryCtx|MutationCtx,userId:string,roomId:Id<'room
  if(rows.length>MAX_ACCEPTANCES)throw new Error('Access review required')
  return rows.find(r=>r.version===version)?.version
 }
-export const overview=query({args:{roomId:v.optional(v.id('rooms'))},handler:async(ctx,args)=>{
- const user=await identity(ctx)
- if(!user)return null
+// Server-only helper; user identity is obtained from Better Auth by the public wrapper.
+export async function overviewForIdentity(ctx:QueryCtx,user:{_id:string;name:string},roomId?:Id<'rooms'>){
  const now=Date.now(),grants=await grantsFor(ctx,user._id)
  const roomIds=[...new Set(grants.filter(g=>g.capability==='room:read'&&g.effect==='allow').map(g=>g.roomId))]
  const rooms=[]
@@ -30,7 +29,7 @@ export const overview=query({args:{roomId:v.optional(v.id('rooms'))},handler:asy
   const room=await ctx.db.get(id)
   if(room&&permits(user._id,room,grants,now,'room:read',undefined,undefined,true))rooms.push({id:room._id,name:room.name})
  }
- const selected=args.roomId?rooms.find(r=>r.id===args.roomId):rooms[0]
+ const selected=roomId?rooms.find(r=>r.id===roomId):rooms[0]
  const basic={name:user.name,rooms}
  if(!selected)return {...basic,room:null,nda:null,sections:[]}
  const room=await ctx.db.get(selected.id)
@@ -50,8 +49,14 @@ export const overview=query({args:{roomId:v.optional(v.id('rooms'))},handler:asy
   if(projection)allowed.push({...projection,category:section.category,order:section.order})
  }
  return {...basic,room:selected,nda:null,sections:allowed.sort((a,b)=>a.order-b.order)}
+}
+export const overview=query({args:{roomId:v.optional(v.id('rooms'))},handler:async(ctx,args)=>{
+ if(process.env.ADC_CONVEX_PORTAL_ENABLED!=='true')return null
+ const user=await identity(ctx)
+ return user?await overviewForIdentity(ctx,user,args.roomId):null
 }})
 export const acceptNda=mutation({args:{roomId:v.id('rooms'),version:v.string(),accepted:v.literal(true)},handler:async(ctx,args)=>{
+ if(process.env.ADC_CONVEX_PORTAL_ENABLED!=='true')throw new Error('Unavailable')
  const user=await identity(ctx)
  if(!user)throw new Error('Unauthorized')
  const room=await ctx.db.get(args.roomId)

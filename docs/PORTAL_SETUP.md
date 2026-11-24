@@ -8,3 +8,5 @@ Enable ADC_STAGING_CMS=true ONLY in a dedicated Convex staging deployment. Inter
 3. grant room:read and section:read separately to verified authUserId, optionally a specific section and expiry; revoke by grant ID. No grant automatically issued.
 4. Login as investor, select room, accept NDA if applicable, view/search authorized content.
 Do not enable ADC_STAGING_CMS in production. Never use real investor data during staging. MFA-bound administrative identity, role assignment, admin UI, durable audit retention, signed NDA evidence policy and actual end-to-end provisioning remain release blockers. Documents/R2 and financial source-backed publishing remain separate epics. No actual business content seeded.
+
+Independent Convex kill switch ADC_CONVEX_PORTAL_ENABLED defaults off. Both server and Convex portal flags must be enabled in isolated staging. DB tests use convex-test with synthetic fixtures and server-only identity helper; these do not replace live Better Auth or MFA tests. The NDA checkbox is tied to the exact displayed version; overlapping refreshes discard stale responses.
