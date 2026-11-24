@@ -11,6 +11,8 @@ export const adminCommand=z.discriminatedUnion('kind',[
  base.extend({kind:z.literal('documentTransition'),documentId:id,action:z.enum(['publish','archive'])}),
  base.extend({kind:z.literal('crmUpdate'),profileId:id,stage:z.enum(stages),nextAction:z.string().max(500),dueDate:z.string().max(10).optional(),assignToMe:z.boolean(),expectedRevision:z.number().int().nonnegative()}),
  base.extend({kind:z.literal('crmNote'),profileId:id,text:z.string().trim().min(1).max(4000)}),
+ base.extend({kind:z.literal('qaReply'),questionId:id,body:z.string().trim().min(1).max(4000)}),
+ base.extend({kind:z.literal('qaClose'),questionId:id}),
  base.extend({kind:z.literal('revoke'),grantId:id}),
  base.extend({kind:z.literal('draft'),slug:z.string().regex(/^[a-z0-9-]+$/).max(80),category:z.enum(['company','products','investment','finance','traction','team','technology','legal','compliance','documents','updates']),order:z.number().int().min(0).max(10000),titleFr:z.string().trim().min(1).max(180),titleEn:z.string().trim().min(1).max(180),bodyFr:z.string().trim().min(1).max(40000),bodyEn:z.string().trim().min(1).max(40000),source:z.string().trim().min(1).max(2000)}),
  base.extend({kind:z.literal('transition'),versionId:id,action:z.enum(['submit','publish'])}),

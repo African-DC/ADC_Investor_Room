@@ -28,3 +28,6 @@ Comparable financial trend charts and [MVP release checklist](docs/RELEASE_CHECK
 
 ## E11 CRM
 See docs/CRM_SETUP.md for scoped pipeline, contacts and internal follow-up. Staging only; no automatic access or email.
+
+## E12 Q&A
+See docs/QA_SETUP.md. Private room/owner-scoped questions and answers with staging admin reply capability. Flags off; no notifications or real data.
