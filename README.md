@@ -15,3 +15,6 @@ Protected investor portal, explicit room/section grants, versioned NDA and stagi
 
 ## E10 finance registry
 See docs/FINANCE_SETUP.md. Evidence-linked metrics, separate review, admin editor and authorized investor view. No actual figures committed. Real provider setup and MFA remain blockers.
+
+## E09 content
+Eleven bilingual editorial templates in the CMS. Only heading/category/slug/order are prefilled. All facts, sources and content require ADC review; nothing seeded or published automatically.
