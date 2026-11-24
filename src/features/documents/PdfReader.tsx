@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react'
 import type {PDFDocumentProxy,RenderTask} from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import {ChevronLeft,ChevronRight,ZoomIn,ZoomOut,X} from 'lucide-react'
-const LIMIT=20*1024*1024
+import {MAX_UPLOAD as LIMIT} from './uploadRules'
 export function PdfReader({roomId,documentId,title,viewer,lang,onClose}:{roomId:string;documentId:string;title:string;viewer:string;lang:'fr'|'en';onClose:()=>void}){
  const [doc,setDoc]=useState<PDFDocumentProxy|null>(null),[page,setPage]=useState(1),[zoom,setZoom]=useState(1),[error,setError]=useState(false),[rendering,setRendering]=useState(true)
  const canvas=useRef<HTMLCanvasElement>(null)

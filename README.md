@@ -50,3 +50,5 @@ Dependency installation: npm ci using committed package-lock.json. Do not regene
 
 ## Storage decision (supersedes historical R2 references)
 Convex native File Storage is the only active document storage path. See docs/DOCUMENT_SETUP.md and STAGING_RUNBOOK.md. No R2 credentials needed; legacy R2 metadata kept only for fixtures/migration review. Real infrastructure not configured.
+
+Agent local: start at [LOCAL_AGENT_HANDOFF.md](docs/LOCAL_AGENT_HANDOFF.md), then review the current CI and staging runbook. This is the authoritative continuation plan.
