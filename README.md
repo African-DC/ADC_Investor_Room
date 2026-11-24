@@ -34,3 +34,6 @@ See docs/QA_SETUP.md. Private room/owner-scoped questions and answers with stagi
 
 ## E13 engagement
 Consent-gated, deduplicated and scoped daily engagement, aggregate dashboard, manual bounded retention purge. See docs/ANALYTICS_SETUP.md.
+
+## E14 GitHub reporting
+Allowlisted metadata snapshots and reviewed CMS draft, staging only. See docs/GITHUB_REPORTING.md. No code or secrets exposed.

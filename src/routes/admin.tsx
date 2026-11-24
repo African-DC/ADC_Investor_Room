@@ -6,6 +6,8 @@ import { getAuthBridge } from '../lib/auth-server'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { adminCommand } from '../features/admin/contracts'
+import { targetsFor,draftText } from '../features/technical/model'
+import { getTechnicalSnapshot } from '../server/githubReporting'
 import { AdminRoom } from '../features/admin/AdminRoom'
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 const search=z.object({roomId:z.string().max(128).optional()})
@@ -19,7 +21,7 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   const room=data.roomId?identity.rooms.find(r=>r.id===data.roomId):identity.rooms[0]
   if(!room)return null
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
-  const metrics=await bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id});const contacts=await bridge.fetchAuthQuery(api.crm.list,{roomId:room.id});const questions=await bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id});const analytics=await bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30});return {identity,dashboard:{...dashboard,metrics,contacts,questions,analytics,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true'}}
+  const metrics=await bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id});const contacts=await bridge.fetchAuthQuery(api.crm.list,{roomId:room.id});const questions=await bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id});const analytics=await bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30});const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics,contacts,questions,analytics,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true'}}
  }catch{return null}
 })
 const command=createServerFn({method:'POST'}).validator(adminCommand).handler(async({data})=>{
@@ -58,7 +60,26 @@ const questionRead=createServerFn({method:'GET'}).validator(z.object({roomId:z.s
  if(!bridge||process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.VERCEL_ENV==='production')return null
  try{return await bridge.fetchAuthQuery(api.qa.adminRead,{roomId:data.roomId as Id<'rooms'>,questionId:data.questionId as Id<'questions'>})}catch{return null}
 })
+const technical=createServerFn({method:'POST'}).validator(z.object({roomId:z.string().max(128),key:z.string().regex(/^[a-z0-9-]{1,40}$/),draft:z.boolean()})).handler(async({data})=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge(),origin=process.env.ADC_APP_ORIGIN
+ if(!bridge||!origin||getRequestHeader('origin')!==origin||process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.VERCEL_ENV==='production'||process.env.ADC_GITHUB_REPORTING_ENABLED!=='true')return null
+ const roomId=data.roomId as Id<'rooms'>
+ try{
+  const rights=await bridge.fetchAuthQuery(api.admin.technicalAccess,{roomId})
+  if(data.draft&&!rights.canDraft)return null
+  const target=targetsFor(process.env.ADC_GITHUB_TARGETS,roomId).find(t=>t.key===data.key)
+  if(!target)return null
+  const snapshot=await getTechnicalSnapshot(roomId,data.key)
+  const current=await bridge.fetchAuthQuery(api.admin.technicalAccess,{roomId})
+  if(data.draft){
+   if(!current.canDraft)return null
+   await bridge.fetchAuthMutation(api.admin.draft,{roomId,slug:'technical-'+target.key,category:'technology',order:target.order,...draftText(snapshot),source:'GitHub REST metadata · '+target.repo+' · '+snapshot.observedAt+' · latest release and up to 30 recently updated closed PRs'})
+  }
+  return {snapshot,drafted:data.draft}
+ }catch{return null}
+})
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/'});return {state}
 },component:Page})
-function Page(){const {state}=Route.useRouteContext();return <AdminRoom key={state.dashboard.room.id} initial={state} reload={()=>load({data:{roomId:state.dashboard.room.id}})} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})}/>}
+function Page(){const {state}=Route.useRouteContext();return <AdminRoom key={state.dashboard.room.id} initial={state} reload={()=>load({data:{roomId:state.dashboard.room.id}})} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}

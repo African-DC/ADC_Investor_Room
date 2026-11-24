@@ -7,7 +7,7 @@ import { authComponent } from './auth'
 import { hasAdminCapability } from './lib/adminPolicy'
 import type { AdminCapability } from './lib/adminPolicy'
 import { v } from 'convex/values'
-const cap=v.union(v.literal('investors:read'),v.literal('access:manage'),v.literal('content:edit'),v.literal('content:review'),v.literal('finance:edit'),v.literal('finance:review'),v.literal('crm:read'),v.literal('crm:edit'),v.literal('qa:read'),v.literal('qa:reply'),v.literal('analytics:read'))
+const cap=v.union(v.literal('investors:read'),v.literal('access:manage'),v.literal('content:edit'),v.literal('content:review'),v.literal('finance:edit'),v.literal('finance:review'),v.literal('crm:read'),v.literal('crm:edit'),v.literal('qa:read'),v.literal('qa:reply'),v.literal('analytics:read'),v.literal('technical:read'))
 function enabled(){return process.env.ADC_STAGING_ADMIN_UI==='true'&&process.env.ADC_STAGING_CMS==='true'}
 export async function admin(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,capability?:AdminCapability){
  if(!enabled())throw new Error('Unavailable')
@@ -120,4 +120,9 @@ export const grantDocument=mutation({args:{roomId:v.id('rooms'),profileId:v.id('
  const document=await ctx.db.get(a.documentId)
  if(!document||document.roomId!==a.roomId)throw Error('Unavailable')
  return await ctx.runMutation(internal.documents.grant,{roomId:a.roomId,documentId:a.documentId,authUserId:profile.authUserId,capability:a.capability,effect:a.effect,expiresAt:a.expiresAt,operatorId:user._id})
+}})
+
+export const technicalAccess=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
+ const {membership}=await admin(ctx,a.roomId,'technical:read')
+ return {canDraft:membership.capabilities.includes('content:edit')}
 }})
