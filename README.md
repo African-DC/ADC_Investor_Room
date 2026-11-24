@@ -25,3 +25,6 @@ See docs/DOCUMENT_SETUP.md; bounded PDF upload and distinct reviewer publication
 Embedded PDF.js reader uses local worker, bounded canvas rendering and personalized visual watermark; no DRM, no range or accessible text layer yet. See DOCUMENT_SETUP.md.
 
 Comparable financial trend charts and [MVP release checklist](docs/RELEASE_CHECKLIST.md). Staging admin/upload denied on Vercel production; independent Convex isolation still required. No real release approved.
+
+## E11 CRM
+See docs/CRM_SETUP.md for scoped pipeline, contacts and internal follow-up. Staging only; no automatic access or email.
