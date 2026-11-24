@@ -24,3 +24,5 @@ No live providers tested, no actual MFA or antivirus integration, no production 
 
 ## Authentication design caveat
 Better Auth's built-in two-factor plugin does not automatically gate passwordless magic-link sign-in. A user-level twoFactorEnabled flag is not a verified step-up. Keep the admin surface staging-only until a separately tested session-bound step-up and enrollment/recovery/revocation flow exists. Reference: https://better-auth.com/docs/plugins/2fa and https://labs.convex.dev/better-auth/security. Never add a passwordless bypass or accept client-provided MFA proof.
+
+Lockfile captured from successful GitHub Actions run 45503554994, exact manifest verified, registry URLs checked. CI now uses npm ci exclusively; full locked CI still to verify and dependency advisories/security review remain mandatory. npm chosen for this initial release to match existing CI; pnpm migration is a separate change, not two competing lockfiles.
