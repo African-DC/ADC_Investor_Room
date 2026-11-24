@@ -12,3 +12,6 @@
 - [ ] Human release approval and separate production rollout; no automatic deployment or merge.
 ## Current limits
 No live providers tested, no actual MFA or antivirus integration, no production access, no real data. The remaining gates are blockers, not tasks marked done by synthetic CI.
+
+## Dependency incident
+2026-11-24 CI failed at npm install because @better-auth/memory-adapter 1.7.28 tarball returned HTTP 404. Pin Better Auth 1.7.26 and Convex adapter 0.13.1, matching the lockfile of the existing Vatel project. This is a candidate fix, not a security or CI certification. Re-run all checks, review advisories and generate a reproducible lockfile before release.
