@@ -5,16 +5,16 @@ import { v } from 'convex/values'
 import { authComponent } from './auth'
 import { permits,currentPublication } from './lib/roomPolicy'
 const MAX_GRANTS=200,MAX_SECTIONS=100,MAX_ACCEPTANCES=100
-async function identity(ctx:QueryCtx|MutationCtx){
+export async function identity(ctx:QueryCtx|MutationCtx){
  const user=await authComponent.safeGetAuthUser(ctx)
  return user?.emailVerified?user:null
 }
-async function grantsFor(ctx:QueryCtx|MutationCtx,userId:string,roomId?:Id<'rooms'>){
+export async function grantsFor(ctx:QueryCtx|MutationCtx,userId:string,roomId?:Id<'rooms'>){
  const result=await (roomId?ctx.db.query('accessGrants').withIndex('by_user_room',q=>q.eq('authUserId',userId).eq('roomId',roomId)):ctx.db.query('accessGrants').withIndex('by_user_room',q=>q.eq('authUserId',userId))).take(MAX_GRANTS+1)
  if(result.length>MAX_GRANTS)throw new Error('Access review required')
  return result
 }
-async function acceptance(ctx:QueryCtx|MutationCtx,userId:string,roomId:Id<'rooms'>,version?:string){
+export async function acceptance(ctx:QueryCtx|MutationCtx,userId:string,roomId:Id<'rooms'>,version?:string){
  if(!version)return undefined
  const rows=await ctx.db.query('ndaAcceptances').withIndex('by_user_room',q=>q.eq('authUserId',userId).eq('roomId',roomId)).take(MAX_ACCEPTANCES+1)
  if(rows.length>MAX_ACCEPTANCES)throw new Error('Access review required')
