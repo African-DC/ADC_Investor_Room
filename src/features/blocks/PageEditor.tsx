@@ -1,4 +1,6 @@
 import { useEffect,useMemo,useState } from 'react'
+import { confirm } from '@ui-sdk/react/alert-dialog'
+const ask=(title:string)=>confirm({title,description:'Cette action est journalisée.',cancelLabel:'Annuler',confirmLabel:'Confirmer'})
 import { Eye,PenLine,Save,Send,CheckCircle2,Archive,Plus,Languages,FileText,Undo2 } from 'lucide-react'
 import { BlockEditor } from './BlockEditor'
 import { BlockView } from './BlockView'
@@ -48,7 +50,7 @@ export function PageEditor({roomId,sections,documents,canEdit,canReview,busy,run
      {canEdit&&l?.state==='draft'&&l.own&&!dirty&&<button type="button" className="dr-btn ghost" disabled={busy} onClick={()=>void run({kind:'transition',roomId,versionId:l.id,action:'submit'})}><Send size={16}/>Soumettre en relecture</button>}
      {canReview&&l?.state==='review'&&!l.own&&!dirty&&<button type="button" className="dr-btn pe-publish" disabled={busy} onClick={()=>void run({kind:'transition',roomId,versionId:l.id,action:'publish'})}><CheckCircle2 size={16}/>Valider et publier</button>}
      {canReview&&l?.state==='review'&&l.own&&<span className="pe-hint">Un autre administrateur doit valider.</span>}
-     {canReview&&section?.published&&<button type="button" className="dr-btn ghost danger" disabled={busy} onClick={()=>{if(confirm('Retirer cette page de la salle ?'))void run({kind:'archive',roomId,sectionId:section.id})}}><Archive size={16}/>Retirer</button>}
+     {canReview&&section?.published&&<button type="button" className="dr-btn ghost danger" disabled={busy} onClick={async()=>{if(await ask('Retirer cette page de la salle ?'))void run({kind:'archive',roomId,sectionId:section.id})}}><Archive size={16}/>Retirer</button>}
     </div>
    </header>
    {canEdit&&<details className="pe-settings" open={current==='new'}><summary>Réglages de la page</summary><div className="pe-settings-grid">

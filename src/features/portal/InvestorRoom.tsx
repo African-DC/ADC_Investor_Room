@@ -1,6 +1,7 @@
 import { useEffect,useRef,useState } from 'react'
 import { Building2,LockKeyhole,ArrowRight,ArrowLeft,LogOut,Globe2,FileText,RefreshCw,LayoutDashboard,Menu,ChevronRight,Hourglass,ShieldCheck,Inbox,Eye,Download,Boxes,TrendingUp,Landmark,Rocket,Users,Cpu,Scale,FolderLock } from 'lucide-react'
 import { JourneyFrame } from '../onboarding/JourneyFrame'
+import { OverlayHost } from '@ui-sdk/react/overlays'
 import { BlockView } from '../blocks/BlockView'
 import { parseBlocks } from '../blocks/schema'
 import type { Block } from '../blocks/schema'
@@ -99,6 +100,7 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
     </div>}
    <footer className="dr-foot"><span><LockKeyhole size={13}/>{fr?'Contenu confidentiel — ne pas diffuser':'Confidential — do not distribute'}</span><span>African Digit Consulting © 2026</span></footer>
   </main>
+  <OverlayHost/>
  </div>
 }
 const icons:Record<string,typeof FileText>={company:Building2,products:Boxes,investment:TrendingUp,finance:Landmark,traction:Rocket,team:Users,technology:Cpu,legal:Scale,compliance:ShieldCheck,documents:FolderLock}
