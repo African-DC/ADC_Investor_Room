@@ -444,3 +444,7 @@ ul.bk-list{list-style:disc}ol.bk-list{list-style:decimal}.bk-list li{padding-lef
 @media(min-width:761px) and (max-height:700px){.journey-logo-reveal{width:clamp(140px,22vh,170px)}}
 .frame-card{overflow:visible}.frame-emblem{margin-top:10px}
 .space-admin .journey-dot{background:#1a5d3a}
+.frame-emblem{margin:14px 0 22px}
+.frame-emblem:after{animation-name:adc-ripple-soft}
+@keyframes adc-ripple-soft{from{opacity:.8;transform:scale(1)}to{opacity:0;transform:scale(1.18)}}
+@media(max-height:760px){.frame-emblem{margin:12px 0 18px}}
