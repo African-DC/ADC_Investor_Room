@@ -25,7 +25,7 @@ export const Route = createRootRoute({
 function Root(){return <html lang="fr"><head><HeadContent/></head><body><Outlet/><Scripts/></body></html>}
 function NotFound(){
  const [lang,setLang]=useState<Lang>('fr')
- return <JourneyFrame lang={lang} setLang={setLang}>
+ return <JourneyFrame space="neutral" lang={lang} setLang={setLang}>
   <p className="frame-numeral" aria-hidden="true">404</p>
   <h1>{lang==='fr'?'Ce chemin n’existe pas.':'This path does not exist.'}</h1>
   <p className="frame-lead">{lang==='fr'?'La page demandée est introuvable ou n’est plus disponible. Reprenons depuis l’accueil.':'The page you requested cannot be found or is no longer available. Let’s start again from the welcome page.'}</p>

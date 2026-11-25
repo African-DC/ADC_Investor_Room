@@ -22,7 +22,7 @@ export const createAuth=(ctx:GenericCtx<DataModel>)=>{
     if(target.origin!==new URL(siteUrl).origin||target.pathname!=='/api/auth/magic-link/verify')throw new Error('Invalid verification URL')
     const confirm=new URL('/confirm',siteUrl)
     confirm.hash=new URLSearchParams({next:target.pathname+target.search}).toString()
-    const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+required('RESEND_API_KEY'),'Content-Type':'application/json'},body:JSON.stringify({from:required('MAIL_FROM'),to:[email],...magicLinkEmail(siteUrl,confirm.toString())})})
+    const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+required('RESEND_API_KEY'),'Content-Type':'application/json'},body:JSON.stringify({from:required('MAIL_FROM'),to:[email],...magicLinkEmail(siteUrl,confirm.toString(),target.searchParams.get('callbackURL')==='/admin')})})
     if(!response.ok)throw new Error('Email service unavailable')
    }
   }),convex({authConfig})]
