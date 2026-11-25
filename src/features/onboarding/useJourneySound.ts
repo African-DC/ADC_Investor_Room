@@ -3,15 +3,15 @@ type Cue='forward'|'back'|'success'
 const notes:Record<Cue,number[]>={forward:[440,659.25],back:[440,329.63],success:[440,554.37,659.25]}
 export function useJourneySound(){
  const [enabled,setEnabled]=useState(false)
- const context=useRef<AudioContext|null>(null)
+ const context=useRef<AudioContext|null>(null),allowed=useRef(false)
  useEffect(()=>()=>{const ctx=context.current;context.current=null;if(ctx)void ctx.close().catch(()=>{})},[])
  function play(cue:Cue,force=false){
-  if(!enabled&&!force)return
+  if(!allowed.current&&!force)return
   try{
    if(!window.AudioContext)return
    const ctx=context.current??new AudioContext();context.current=ctx
    const render=()=>{
-    if(context.current!==ctx||ctx.state!=='running')return
+    if(!allowed.current||context.current!==ctx||ctx.state!=='running')return
     const now=ctx.currentTime
     notes[cue].forEach((frequency,i)=>{
      const start=now+i*.075,osc=ctx.createOscillator(),gain=ctx.createGain()
@@ -25,6 +25,6 @@ export function useJourneySound(){
    else render()
   }catch{/* Sound is optional: never block onboarding. */}
  }
- function toggle(){if(enabled){setEnabled(false);const ctx=context.current;if(ctx){context.current=null;void ctx.close().catch(()=>{})}}else{setEnabled(true);play('forward',true)}}
+ function toggle(){if(allowed.current){allowed.current=false;setEnabled(false);const ctx=context.current;if(ctx){context.current=null;void ctx.close().catch(()=>{})}}else{allowed.current=true;setEnabled(true);play('forward',true)}}
  return {enabled,toggle,play}
 }
