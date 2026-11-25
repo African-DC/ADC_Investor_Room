@@ -14,3 +14,4 @@ test-results/
 *.xlsx
 *.docx
 src/routeTree.gen.ts
+.vercel
