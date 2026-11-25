@@ -46,7 +46,7 @@ export async function overviewForIdentity(ctx:QueryCtx,user:{_id:string;name:str
   if(!section.publishedVersionId||!permits(user._id,room,grants,now,'section:read',section._id,accepted))continue
   const version=await ctx.db.get(section.publishedVersionId)
   const projection=currentPublication(section,version)
-  if(projection)allowed.push({...projection,versionId:version!._id,category:section.category,order:section.order})
+  if(projection)allowed.push({...projection,versionId:version!._id,slug:section.slug,category:section.category,order:section.order})
  }
  return {...basic,room:selected,nda:null,sections:allowed.sort((a,b)=>a.order-b.order)}
 }
