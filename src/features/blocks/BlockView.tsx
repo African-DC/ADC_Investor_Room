@@ -5,7 +5,7 @@ export type ImageMap=Record<string,{src:string;width:number;height:number}>
 type Doc={id:string;titleFr:string;titleEn:string}
 // Renders validated blocks. Document blocks only render when the document is in the caller's ACL-filtered list.
 export function BlockView({blocks,lang,documents=[],openDocument,images={}}:{blocks:Block[];lang:'fr'|'en';documents?:Doc[];openDocument?:(id:string)=>void;images?:ImageMap}){
- return <div className="bk">{blocks.map((b,i)=><div key={b.id} className={'bk-item bk-'+b.type+(b.type==='image'?' layout-'+b.layout:'')} style={{animationDelay:Math.min(i,12)*40+'ms'}}>{render(b)}</div>)}</div>
+ return <div className="bk">{blocks.map((b,i)=><div key={b.id} className={'bk-item t-'+b.type+(b.type==='image'?' layout-'+b.layout:'')} style={{animationDelay:Math.min(i,12)*40+'ms'}}>{render(b)}</div>)}</div>
  function render(b:Block){switch(b.type){
   case 'heading':return b.level===2?<h2 className="bk-h2">{b.text}</h2>:<h3 className="bk-h3">{b.text}</h3>
   case 'paragraph':return <p className="bk-p">{b.text}</p>

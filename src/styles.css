@@ -593,3 +593,6 @@ ul.bk-list{list-style:disc}ol.bk-list{list-style:decimal}.bk-list li{padding-lef
 .be-cell.num{text-align:right;font-variant-numeric:tabular-nums}
 .ip{display:flex;align-items:center;gap:12px}.ip-thumb{width:120px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ece4da}.ip-empty{width:120px;height:80px;border-radius:10px;border:1px dashed #dccfc1;display:grid;place-items:center;color:#b8a898;background:#fbf7f2}
 .ip-side{display:grid;gap:4px}.ip-side small{font-size:11px;color:#8a7b6d}.ip-err{color:#9f3030!important}
+.bk-img img{max-height:min(72vh,720px);object-fit:cover}
+@media(max-width:520px){.ch{padding:14px}.ch-x,.ch-y,.ch-val{font-size:10px}}
+.pe-preview .bk-item.layout-wide{margin-inline:0}

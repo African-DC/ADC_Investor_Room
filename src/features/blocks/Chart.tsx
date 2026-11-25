@@ -1,25 +1,28 @@
-import { useId,useMemo,useState } from 'react'
+import { useEffect,useId,useMemo,useRef,useState } from 'react'
 import { Table2 } from 'lucide-react'
 import type { Block } from './schema'
 type ChartBlock=Extract<Block,{type:'chart'}>
 // ADC categorical order (validated: lightness band, chroma, CVD adjacent ≥ 7 with secondary encoding, contrast ≥ 3:1).
 export const SERIES=['#c2410c','#1d5fa8','#b7791f','#1a7f52','#7c3aed','#be185d']
-const H={sm:220,md:300,lg:380},W=640,PAD={l:56,r:18,t:18,b:42}
+const H={sm:220,md:300,lg:380},PAD={l:52,r:16,t:18,b:42}
 function nice(max:number){if(max<=0)return 1;const p=Math.pow(10,Math.floor(Math.log10(max))),n=max/p;return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p}
 export function fmt(n:number,lang:'fr'|'en',unit=''){const a=Math.abs(n);const s=a>=1e9?(n/1e9).toLocaleString(lang,{maximumFractionDigits:1})+(lang==='fr'?' Md':'B'):a>=1e6?(n/1e6).toLocaleString(lang,{maximumFractionDigits:1})+' M':a>=1e4?(n/1e3).toLocaleString(lang,{maximumFractionDigits:1})+(lang==='fr'?' k':'k'):n.toLocaleString(lang,{maximumFractionDigits:2});return unit?s+' '+unit:s}
 function topRounded(x:number,y:number,w:number,h:number,r=4){if(h<=0)return '';const rr=Math.min(r,w/2,h);return `M${x},${y+h}V${y+rr}Q${x},${y} ${x+rr},${y}H${x+w-rr}Q${x+w},${y} ${x+w},${y+rr}V${y+h}Z`}
 function rightRounded(x:number,y:number,w:number,h:number,r=4){if(w<=0)return '';const rr=Math.min(r,h/2,w);return `M${x},${y}H${x+w-rr}Q${x+w},${y} ${x+w},${y+rr}V${y+h-rr}Q${x+w},${y+h} ${x+w-rr},${y+h}H${x}Z`}
 export function Chart({b,lang}:{b:ChartBlock;lang:'fr'|'en'}){
+ const box=useRef<HTMLDivElement>(null),[W,setW]=useState(640)
+ // Lay out at the real rendered width so text stays legible on phones (no uniform down-scaling).
+ useEffect(()=>{const el=box.current;if(!el)return;const ro=new ResizeObserver(([e])=>setW(Math.max(300,Math.round(e!.contentRect.width))));ro.observe(el);return()=>ro.disconnect()},[])
  const uid=useId().replace(/:/g,''),[hover,setHover]=useState<number|null>(null),[table,setTable]=useState(false)
  const series=b.series.map((s,i)=>({...s,color:SERIES[i%SERIES.length],values:b.labels.map((_,k)=>Number.isFinite(s.values[k])?s.values[k]:0)}))
- const h=H[b.height],innerW=W-PAD.l-PAD.r,innerH=h-PAD.t-PAD.b,n=b.labels.length
+ const h=Math.round(H[b.height]*(W<520?.85:1)),innerW=W-PAD.l-PAD.r,innerH=h-PAD.t-PAD.b,n=b.labels.length
  const max=useMemo(()=>{if(b.kind==='stacked')return nice(Math.max(0,...b.labels.map((_,k)=>series.reduce((a,s)=>a+Math.max(0,s.values[k]),0))));return nice(Math.max(0,...series.flatMap(s=>s.values)))},[b,series])
  const ticks=[0,.25,.5,.75,1].map(f=>f*max),y=(v:number)=>PAD.t+innerH-(v/max)*innerH
  const legend=series.length>1||b.kind==='donut'
  const tip=hover!==null&&<div className="ch-tip" style={{left:`${b.kind==='hbar'?60:((PAD.l+(hover+.5)*innerW/n)/W)*100}%`,top:b.kind==='hbar'?`${((PAD.t+(hover+.5)*(innerH/n))/h)*100}%`:'8px'}} role="status"><strong>{b.labels[hover]}</strong>{(b.kind==='donut'?[series[0]]:series).map(s=>{const v=b.kind==='donut'?s.values[hover]:s.values[hover];return <span key={s.name}><i style={{background:b.kind==='donut'?SERIES[hover%SERIES.length]:s.color}}/>{b.kind!=='donut'&&series.length>1?s.name+' : ':''}<b>{fmt(v,lang,b.unit)}</b></span>})}</div>
  let plot:React.ReactNode=null
  if(b.kind==='bar'||b.kind==='stacked'){
-  const band=innerW/n,groupW=band*.68,gap=2,barW=b.kind==='stacked'?groupW:(groupW-gap*(series.length-1))/series.length
+  const band=innerW/n,groupW=band*(W<520?.78:.68),gap=2,barW=b.kind==='stacked'?groupW:(groupW-gap*(series.length-1))/series.length
   plot=<g>{b.labels.map((l,k)=>{let acc=0;return <g key={k} className={hover===null||hover===k?'':'ch-dim'}>{series.map((s,i)=>{const v=Math.max(0,s.values[k]);if(b.kind==='stacked'){const y0=y(acc),y1=y(acc+v);acc+=v;const last=i===series.length-1||series.slice(i+1).every(x=>x.values[k]<=0);return <path key={i} className="ch-bar" style={{animationDelay:k*40+'ms'}} d={last?topRounded(PAD.l+k*band+(band-groupW)/2,y1,groupW,Math.max(0,y0-y1-(i?gap:0))):`M${PAD.l+k*band+(band-groupW)/2},${y1}h${groupW}v${Math.max(0,y0-y1-(i?gap:0))}h${-groupW}Z`} fill={s.color}/>}
     const x=PAD.l+k*band+(band-groupW)/2+i*(barW+gap);return <path key={i} className="ch-bar" style={{animationDelay:k*40+i*20+'ms'}} d={topRounded(x,y(v),barW,innerH+PAD.t-y(v))} fill={s.color}/>})}
     {b.showValues&&b.kind==='bar'&&series.map((s,i)=>{const x=PAD.l+k*band+(band-groupW)/2+i*(barW+gap)+barW/2;return <text key={'v'+i} className="ch-val" x={x} y={y(Math.max(0,s.values[k]))-6} textAnchor="middle">{fmt(s.values[k],lang)}</text>})}
@@ -28,7 +31,7 @@ export function Chart({b,lang}:{b:ChartBlock;lang:'fr'|'en'}){
     <rect className="ch-hit" x={PAD.l+k*band} y={PAD.t} width={band} height={innerH} onMouseEnter={()=>setHover(k)} onMouseLeave={()=>setHover(null)} onFocus={()=>setHover(k)} onBlur={()=>setHover(null)} tabIndex={0} aria-label={l+' : '+series.map(s=>s.name+' '+fmt(s.values[k],lang,b.unit)).join(', ')}/></g>})}</g>
  }
  if(b.kind==='hbar'){
-  const lw=120,band=innerH/n,groupH=band*.7,gap=2,barH=(groupH-gap*(series.length-1))/series.length,x=(v:number)=>PAD.l+lw-40+(v/max)*(innerW-lw+40-30)
+  const lw=W<520?96:120,band=innerH/n,groupH=band*.7,gap=2,barH=(groupH-gap*(series.length-1))/series.length,x=(v:number)=>PAD.l+lw-40+(v/max)*(innerW-lw+40-30)
   plot=<g>{b.labels.map((l,k)=><g key={k} className={hover===null||hover===k?'':'ch-dim'}><text className="ch-x" x={PAD.l+lw-48} y={PAD.t+k*band+band/2+4} textAnchor="end">{l.length>18?l.slice(0,17)+'…':l}</text>
    {series.map((s,i)=>{const yy=PAD.t+k*band+(band-groupH)/2+i*(barH+gap),v=Math.max(0,s.values[k]);return <g key={i}><path className="ch-bar h" style={{animationDelay:k*40+'ms'}} d={rightRounded(x(0),yy,x(v)-x(0),barH)} fill={s.color}/>{b.showValues&&<text className="ch-val" x={x(v)+6} y={yy+barH/2+4}>{fmt(s.values[k],lang)}</text>}</g>})}
    <rect className="ch-hit" x={PAD.l} y={PAD.t+k*band} width={innerW} height={band} onMouseEnter={()=>setHover(k)} onMouseLeave={()=>setHover(null)} onFocus={()=>setHover(k)} onBlur={()=>setHover(null)} tabIndex={0} aria-label={l}/></g>)}</g>
@@ -57,7 +60,7 @@ export function Chart({b,lang}:{b:ChartBlock;lang:'fr'|'en'}){
  return <figure className="ch">
   {(b.title||b.subtitle)&&<figcaption><strong>{b.title}</strong>{b.subtitle&&<span>{b.subtitle}</span>}</figcaption>}
   {legend&&<ul className="ch-legend">{(b.kind==='donut'?b.labels.map((l,k)=>({name:l,color:SERIES[k%SERIES.length],extra:total?Math.round(Math.max(0,series[0].values[k])/total*100)+' %':''})):series.map(s=>({name:s.name,color:s.color,extra:''}))).map(x=><li key={x.name}><i style={{background:x.color}}/>{x.name}{x.extra&&<b>{x.extra}</b>}</li>)}</ul>}
-  <div className="ch-plot"><svg viewBox={`0 0 ${W} ${h}`} role="img" aria-label={(b.title||'Graphique')+'. '+(lang==='fr'?'Détail disponible dans le tableau.':'Details in the table view.')}>
+  <div className="ch-plot" ref={box}><svg viewBox={`0 0 ${W} ${h}`} role="img" aria-label={(b.title||'Graphique')+'. '+(lang==='fr'?'Détail disponible dans le tableau.':'Details in the table view.')}>
    <defs>{series.map((s,i)=><linearGradient key={i} id={`g${uid}${i}`} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={s.color} stopOpacity=".28"/><stop offset="1" stopColor={s.color} stopOpacity="0"/></linearGradient>)}</defs>
    {axes}{plot}</svg>{tip}</div>
   <div className="ch-foot">{b.note&&<span>{b.note}</span>}<button type="button" className="ch-tbtn" aria-expanded={table} onClick={()=>setTable(t=>!t)}><Table2 size={14}/>{table?(lang==='fr'?'Masquer les données':'Hide data'):(lang==='fr'?'Voir les données':'View data')}</button></div>
