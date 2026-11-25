@@ -1,13 +1,18 @@
 import { useRef,useState } from 'react'
 import type { ReactNode } from 'react'
-import { GripVertical,ArrowUp,ArrowDown,Copy,Trash2,Plus,Heading,Pilcrow,List,MessageSquareQuote,Minus,Table2,BarChart3,LayoutGrid,ListChecks,FileText,Link2,Info,Hash,X } from 'lucide-react'
+import { GripVertical,ArrowUp,ArrowDown,Copy,Trash2,Plus,Heading,Pilcrow,List,MessageSquareQuote,Minus,Table2,BarChart3,LayoutGrid,ListChecks,FileText,Link2,Info,Hash,X,LineChart,Image as ImageIcon,Columns2,LayoutPanelLeft } from 'lucide-react'
 import { newId } from './schema'
+import { ImagePicker } from './ImagePicker'
+import type { Uploader } from './ImagePicker'
+import type { ImageMap } from './BlockView'
+import { SERIES } from './Chart'
 import type { Block,BlockType } from './schema'
 type Doc={id:string;titleFr:string}
 const palette:{type:BlockType;label:string;hint:string;icon:typeof Heading}[]=[
  {type:'heading',label:'Titre',hint:'Intertitre de section',icon:Heading},{type:'paragraph',label:'Texte',hint:'Paragraphe',icon:Pilcrow},{type:'list',label:'Liste',hint:'À puces ou numérotée',icon:List},
  {type:'callout',label:'Encadré',hint:'Information mise en avant',icon:Info},{type:'stats',label:'Chiffres clés',hint:'Indicateurs en grand',icon:Hash},{type:'cards',label:'Cartes',hint:'Grille de points forts',icon:LayoutGrid},
  {type:'table',label:'Tableau',hint:'Lignes et colonnes',icon:Table2},{type:'allocation',label:'Répartition',hint:'Barres de pourcentage',icon:BarChart3},{type:'status',label:'Statuts',hint:'Fait / en cours / à venir',icon:ListChecks},
+ {type:'chart',label:'Graphique',hint:'Barres, courbes, aires, anneau',icon:LineChart},{type:'image',label:'Image',hint:'Pleine largeur, centrée…',icon:ImageIcon},{type:'media',label:'Image + texte',hint:'Image à gauche ou à droite',icon:LayoutPanelLeft},{type:'gallery',label:'Galerie',hint:'Grille de 2 à 4 images',icon:Columns2},
  {type:'quote',label:'Citation',hint:'Phrase forte',icon:MessageSquareQuote},{type:'document',label:'Document',hint:'PDF de la bibliothèque',icon:FileText},{type:'link',label:'Lien',hint:'Lien externe sécurisé',icon:Link2},{type:'divider',label:'Séparateur',hint:'Ligne de séparation',icon:Minus},
 ]
 export function emptyBlock(type:BlockType):Block{const id=newId();switch(type){
@@ -15,9 +20,9 @@ export function emptyBlock(type:BlockType):Block{const id=newId();switch(type){
  case 'callout':return {id,type,tone:'brand',title:'',text:''};case 'stats':return {id,type,items:[{value:'',label:''},{value:'',label:''}]}
  case 'table':return {id,type,header:true,rows:[['',''],['','']]};case 'quote':return {id,type,text:'',author:''};case 'divider':return {id,type}
  case 'allocation':return {id,type,title:'',total:'',note:'',items:[{label:'',amount:'',percent:0}]};case 'status':return {id,type,items:[{label:'',state:'progress',note:''}]}
- case 'cards':return {id,type,items:[{title:'',text:''},{title:'',text:''}]};case 'document':return {id,type,documentId:'',caption:''};case 'link':return {id,type,url:'https://',label:''}
+ case 'cards':return {id,type,items:[{title:'',text:''},{title:'',text:''}]};case 'chart':return {id,type,kind:'bar',title:'',subtitle:'',unit:'',labels:['2024','2025','2026'],series:[{name:'Série 1',values:[0,0,0]}],showValues:true,height:'md',note:''};case 'image':return {id,type,imageId:'',alt:'',caption:'',layout:'full'};case 'media':return {id,type,imageId:'',alt:'',side:'left',ratio:'4/3',title:'',text:''};case 'gallery':return {id,type,columns:3,images:[]};case 'document':return {id,type,documentId:'',caption:''};case 'link':return {id,type,url:'https://',label:''}
 }}
-export function BlockEditor({value,onChange,documents}:{value:Block[];onChange:(b:Block[])=>void;documents:Doc[]}){
+export function BlockEditor({value,onChange,documents,images,upload}:{value:Block[];onChange:(b:Block[])=>void;documents:Doc[];images:ImageMap;upload:Uploader}){
  const [menuAt,setMenuAt]=useState<number|null>(null),[dragging,setDragging]=useState<number|null>(null),[over,setOver]=useState<number|null>(null)
  const set=(i:number,b:Block)=>onChange(value.map((x,k)=>k===i?b:x))
  const insert=(i:number,type:BlockType)=>{const next=[...value];next.splice(i,0,emptyBlock(type));onChange(next);setMenuAt(null)}
@@ -30,7 +35,7 @@ export function BlockEditor({value,onChange,documents}:{value:Block[];onChange:(
    <section className={'be-block'+(dragging===i?' is-dragging':'')+(over===i&&dragging!==null&&dragging!==i?' is-over':'')} onDragOver={e=>{if(dragging===null)return;e.preventDefault();setOver(i)}} onDrop={e=>{e.preventDefault();if(dragging!==null)move(dragging,i);setDragging(null);setOver(null)}}>
     <header className="be-bar"><span className="be-handle" draggable onDragStart={e=>{setDragging(i);e.dataTransfer.effectAllowed='move'}} onDragEnd={()=>{setDragging(null);setOver(null)}} title="Glisser pour déplacer"><GripVertical size={16}/></span><span className="be-type"><meta.icon size={14}/>{meta.label}</span>
      <span className="be-tools"><button type="button" aria-label="Monter" disabled={i===0} onClick={()=>move(i,i-1)}><ArrowUp size={15}/></button><button type="button" aria-label="Descendre" disabled={i===value.length-1} onClick={()=>move(i,i+1)}><ArrowDown size={15}/></button><button type="button" aria-label="Dupliquer" onClick={()=>{const next=[...value];next.splice(i+1,0,{...structuredClone(b),id:newId()});onChange(next)}}><Copy size={15}/></button><button type="button" aria-label="Supprimer" className="danger" onClick={()=>onChange(value.filter((_,k)=>k!==i))}><Trash2 size={15}/></button></span></header>
-    <div className="be-body">{fields(b,v=>set(i,v),documents)}</div>
+    <div className="be-body">{fields(b,v=>set(i,v),documents,images,upload)}</div>
    </section><Inserter at={i+1}/></div>})}
  </div>
 }
@@ -42,7 +47,7 @@ function Line({value,onChange,placeholder,className=''}:{value:string;onChange:(
 function Rows<T>({items,onChange,make,render,add}:{items:T[];onChange:(x:T[])=>void;make:()=>T;render:(x:T,set:(x:T)=>void)=>ReactNode;add:string}){
  return <div className="be-rows">{items.map((x,i)=><div className="be-row" key={i}>{render(x,v=>onChange(items.map((y,k)=>k===i?v:y)))}<button type="button" className="be-x" aria-label="Retirer" onClick={()=>onChange(items.filter((_,k)=>k!==i))}><X size={14}/></button></div>)}<button type="button" className="be-add" onClick={()=>onChange([...items,make()])}><Plus size={14}/>{add}</button></div>
 }
-function fields(b:Block,set:(b:Block)=>void,documents:Doc[]):ReactNode{switch(b.type){
+function fields(b:Block,set:(b:Block)=>void,documents:Doc[],images:ImageMap,upload:Uploader):ReactNode{switch(b.type){
  case 'heading':return <div className="be-inline"><select value={b.level} onChange={e=>set({...b,level:Number(e.target.value) as 2|3})}><option value={2}>Grand titre</option><option value={3}>Sous-titre</option></select><Line className={'h'+b.level} value={b.text} onChange={text=>set({...b,text})} placeholder="Titre…"/></div>
  case 'paragraph':return <Area value={b.text} onChange={text=>set({...b,text})} placeholder="Écrivez votre texte…" rows={4}/>
  case 'list':return <><label className="be-toggle"><input type="checkbox" checked={b.ordered} onChange={e=>set({...b,ordered:e.target.checked})}/>Liste numérotée</label><Area value={b.items.join('\n')} onChange={v=>set({...b,items:v.split('\n')})} placeholder="Un élément par ligne" rows={4}/></>
@@ -57,5 +62,29 @@ function fields(b:Block,set:(b:Block)=>void,documents:Doc[]):ReactNode{switch(b.
  case 'allocation':return <><div className="be-inline"><Line value={b.title} onChange={title=>set({...b,title})} placeholder="Titre (ex. Utilisation des fonds)"/><Line className="w-md" value={b.total} onChange={total=>set({...b,total})} placeholder="100 000 000 FCFA"/></div><Rows items={b.items} onChange={items=>set({...b,items})} make={()=>({label:'',amount:'',percent:0})} add="Ajouter un poste" render={(x,s)=><><Line value={x.label} onChange={label=>s({...x,label})} placeholder="Marketing et déploiement"/><Line className="w-md" value={x.amount} onChange={amount=>s({...x,amount})} placeholder="35 M FCFA"/><input className="be-line w-xs" type="number" min={0} max={100} value={x.percent} onChange={e=>s({...x,percent:Math.max(0,Math.min(100,Number(e.target.value)||0))})} aria-label="Pourcentage"/>%</>}/><p className={'be-sum'+(b.items.reduce((a,x)=>a+x.percent,0)===100?' ok':'')}>Total : {b.items.reduce((a,x)=>a+x.percent,0)} %</p><Line value={b.note} onChange={note=>set({...b,note})} placeholder="Note (ex. allocation prévisionnelle à valider)"/></>
  case 'status':return <Rows items={b.items} onChange={items=>set({...b,items})} make={()=>({label:'',state:'progress' as const,note:''})} add="Ajouter un élément" render={(x,s)=><><Line value={x.label} onChange={label=>s({...x,label})} placeholder="Élément"/><select value={x.state} onChange={e=>s({...x,state:e.target.value as typeof x.state})}><option value="done">Fait / disponible</option><option value="progress">En cours</option><option value="todo">À venir</option></select><Line className="w-md" value={x.note} onChange={note=>s({...x,note})} placeholder="Libellé (facultatif)"/></>}/>
  case 'document':return <div className="be-inline"><select value={b.documentId} onChange={e=>set({...b,documentId:e.target.value})}><option value="">Choisir un document…</option>{documents.map(d=><option key={d.id} value={d.id}>{d.titleFr}</option>)}</select><Line value={b.caption} onChange={caption=>set({...b,caption})} placeholder="Légende (facultatif)"/></div>
+ case 'chart':return <ChartFields b={b} set={set}/>
+ case 'image':return <><ImagePicker value={b.imageId} onChange={imageId=>set({...b,imageId})} images={images} upload={upload}/><div className="be-inline"><label className="be-lbl">Placement<select value={b.layout} onChange={e=>set({...b,layout:e.target.value as typeof b.layout})}><option value="full">Pleine largeur</option><option value="wide">Large (déborde du texte)</option><option value="center">Centrée</option><option value="small">Petite</option></select></label></div><Line value={b.alt} onChange={alt=>set({...b,alt})} placeholder="Description de l’image (accessibilité, obligatoire)"/><Line value={b.caption} onChange={caption=>set({...b,caption})} placeholder="Légende (facultatif)"/></>
+ case 'media':return <><ImagePicker value={b.imageId} onChange={imageId=>set({...b,imageId})} images={images} upload={upload}/><div className="be-inline"><label className="be-lbl">Image<select value={b.side} onChange={e=>set({...b,side:e.target.value as typeof b.side})}><option value="left">À gauche</option><option value="right">À droite</option></select></label><label className="be-lbl">Format<select value={b.ratio} onChange={e=>set({...b,ratio:e.target.value as typeof b.ratio})}><option value="1/1">Carré</option><option value="4/3">4:3</option><option value="3/2">3:2</option><option value="16/9">16:9</option></select></label></div><Line value={b.alt} onChange={alt=>set({...b,alt})} placeholder="Description de l’image"/><Line value={b.title} onChange={title=>set({...b,title})} placeholder="Titre"/><Area value={b.text} onChange={text=>set({...b,text})} placeholder="Texte à côté de l’image" rows={3}/></>
+ case 'gallery':return <><div className="be-inline"><label className="be-lbl">Colonnes<select value={b.columns} onChange={e=>set({...b,columns:Number(e.target.value) as 2|3|4})}><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option></select></label></div><Rows items={b.images} onChange={imgs=>set({...b,images:imgs})} make={()=>({imageId:'',alt:'',caption:''})} add="Ajouter une image" render={(x,s2)=><div className="be-stack"><ImagePicker value={x.imageId} onChange={imageId=>s2({...x,imageId})} images={images} upload={upload}/><Line value={x.alt} onChange={alt=>s2({...x,alt})} placeholder="Description"/><Line value={x.caption} onChange={caption=>s2({...x,caption})} placeholder="Légende (facultatif)"/></div>}/></>
  case 'link':return <div className="be-inline"><Line value={b.label} onChange={label=>set({...b,label})} placeholder="Libellé du lien"/><Line value={b.url} onChange={url=>set({...b,url})} placeholder="https://…"/></div>
 }}
+
+type ChartB=Extract<Block,{type:'chart'}>
+const kinds:[ChartB['kind'],string][]=[['bar','Barres'],['hbar','Barres horizontales'],['stacked','Barres empilées'],['line','Courbe'],['area','Aire'],['donut','Anneau (répartition)']]
+function ChartFields({b,set}:{b:ChartB;set:(b:Block)=>void}){
+ const resize=(labels:string[])=>set({...b,labels,series:b.series.map(s=>({...s,values:labels.map((_,i)=>s.values[i]??0)}))})
+ const single=b.kind==='donut'
+ return <div className="be-chart">
+  <div className="be-kinds" role="radiogroup" aria-label="Type de graphique">{kinds.map(([k,l])=><button type="button" key={k} role="radio" aria-checked={b.kind===k} className={b.kind===k?'on':''} onClick={()=>set({...b,kind:k,series:k==='donut'?b.series.slice(0,1):b.series})}>{l}</button>)}</div>
+  <div className="be-inline"><Line value={b.title} onChange={title=>set({...b,title})} placeholder="Titre du graphique"/><Line className="w-md" value={b.unit} onChange={unit=>set({...b,unit})} placeholder="Unité (ex. FCFA, %)"/></div>
+  <Line value={b.subtitle} onChange={subtitle=>set({...b,subtitle})} placeholder="Sous-titre (période, périmètre…)"/>
+  <div className="be-sheet" style={{gridTemplateColumns:`150px repeat(${b.series.length},minmax(90px,1fr)) 28px`}}>
+   <span className="be-sh">{single?'Part':'Libellé'}</span>{b.series.map((s,i)=><span key={i} className="be-sh"><i style={{background:SERIES[i%SERIES.length]}}/><input value={s.name} onChange={e=>set({...b,series:b.series.map((x,k)=>k===i?{...x,name:e.target.value}:x)})} aria-label={'Nom de la série '+(i+1)}/>{b.series.length>1&&<button type="button" className="be-x" aria-label="Retirer la série" onClick={()=>set({...b,series:b.series.filter((_,k)=>k!==i)})}><X size={12}/></button>}</span>)}<span/>
+   {b.labels.map((l,r)=><div key={r} style={{display:'contents'}}><input className="be-cell head" value={l} onChange={e=>resize(b.labels.map((x,k)=>k===r?e.target.value:x))} aria-label={'Libellé '+(r+1)}/>{b.series.map((s,i)=><input key={i} className="be-cell num" inputMode="decimal" value={String(s.values[r]??0)} onChange={e=>{const v=Number(e.target.value.replace(/\s/g,'').replace(',','.'));set({...b,series:b.series.map((x,k)=>k===i?{...x,values:x.values.map((y,j)=>j===r?(Number.isFinite(v)?v:0):y)}:x)})}} aria-label={s.name+' — '+l}/>)}<button type="button" className="be-x" aria-label="Retirer la ligne" disabled={b.labels.length<=1} onClick={()=>resize(b.labels.filter((_,k)=>k!==r))}><X size={12}/></button></div>)}
+  </div>
+  <div className="be-inline"><button type="button" className="be-add" disabled={b.labels.length>=24} onClick={()=>resize([...b.labels,'Nouveau'])}><Plus size={14}/>Ligne</button>{!single&&<button type="button" className="be-add" disabled={b.series.length>=6} onClick={()=>set({...b,series:[...b.series,{name:'Série '+(b.series.length+1),values:b.labels.map(()=>0)}]})}><Plus size={14}/>Série</button>}
+   <label className="be-toggle"><input type="checkbox" checked={b.showValues} onChange={e=>set({...b,showValues:e.target.checked})}/>Afficher les valeurs</label>
+   <label className="be-lbl">Hauteur<select value={b.height} onChange={e=>set({...b,height:e.target.value as ChartB['height']})}><option value="sm">Compacte</option><option value="md">Moyenne</option><option value="lg">Grande</option></select></label></div>
+  <Line value={b.note} onChange={note=>set({...b,note})} placeholder="Source / note (ex. Comptes 2025 non audités)"/>
+ </div>
+}

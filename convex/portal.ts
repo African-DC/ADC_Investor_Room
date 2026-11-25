@@ -4,6 +4,7 @@ import type { Id } from './_generated/dataModel'
 import { v } from 'convex/values'
 import { authComponent } from './auth'
 import { permits,currentPublication } from './lib/roomPolicy'
+import { imagesFor,imageIdsIn } from './media'
 const MAX_GRANTS=200,MAX_SECTIONS=100,MAX_ACCEPTANCES=100
 export async function identity(ctx:QueryCtx|MutationCtx){
  const user=await authComponent.safeGetAuthUser(ctx)
@@ -48,7 +49,8 @@ export async function overviewForIdentity(ctx:QueryCtx,user:{_id:string;name:str
   const projection=currentPublication(section,version)
   if(projection)allowed.push({...projection,versionId:version!._id,slug:section.slug,category:section.category,order:section.order})
  }
- return {...basic,room:selected,nda:null,sections:allowed.sort((a,b)=>a.order-b.order)}
+ const images=await imagesFor(ctx,room._id,allowed.flatMap(s=>[...imageIdsIn(s.blocksFr),...imageIdsIn(s.blocksEn)]))
+ return {...basic,room:selected,nda:null,sections:allowed.sort((a,b)=>a.order-b.order),images}
 }
 export const overview=query({args:{roomId:v.optional(v.id('rooms'))},handler:async(ctx,args)=>{
  if(process.env.ADC_CONVEX_PORTAL_ENABLED!=='true')return null

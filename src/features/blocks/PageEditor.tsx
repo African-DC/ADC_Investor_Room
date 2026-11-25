@@ -4,6 +4,7 @@ const ask=(title:string)=>confirm({title,description:'Cette action est journalis
 import { Eye,PenLine,Save,Send,CheckCircle2,Archive,Plus,Languages,FileText,Undo2 } from 'lucide-react'
 import { BlockEditor } from './BlockEditor'
 import { BlockView } from './BlockView'
+import type { ImageMap } from './BlockView'
 import { parseBlocks,textToBlocks,blocksToText,newId } from './schema'
 import type { Block } from './schema'
 import { brandFor } from '../brand/products'
@@ -15,7 +16,9 @@ type Doc={id:string;titleFr:string;titleEn:string}
 const categories:[string,string][]=[['company','Entreprise'],['products','Produit'],['investment','Investissement'],['finance','Finances'],['traction','Traction'],['team','Équipe'],['technology','Technologie'],['legal','Juridique'],['compliance','Conformité'],['documents','Documents'],['updates','Actualités']]
 const stateLabel:Record<string,string>={draft:'Brouillon',review:'En relecture',published:'Publiée',archived:'Archivée'}
 function load(json:string|null|undefined,fallback:string){try{return parseBlocks(json)??textToBlocks(fallback)}catch{return textToBlocks(fallback)}}
-export function PageEditor({roomId,sections,documents,canEdit,canReview,busy,run}:{roomId:string;sections:EditorSection[];documents:Doc[];canEdit:boolean;canReview:boolean;busy:boolean;run:(c:AdminCommand)=>Promise<void>}){
+export function PageEditor({roomId,sections,documents,canEdit,canReview,busy,run,images:serverImages={},uploadImage}:{roomId:string;sections:EditorSection[];documents:Doc[];canEdit:boolean;canReview:boolean;busy:boolean;run:(c:AdminCommand)=>Promise<void>;images?:ImageMap;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
+ const [localImages,setLocalImages]=useState<ImageMap>({}),images={...serverImages,...localImages}
+ const upload=async(f:{dataUrl:string;width:number;height:number})=>{const id=await uploadImage(f);if(id)setLocalImages(m=>({...m,[id]:{src:f.dataUrl,width:f.width,height:f.height}}));return id}
  const sorted=useMemo(()=>[...sections].sort((a,b)=>a.order-b.order),[sections])
  const [current,setCurrent]=useState<string|'new'|null>(sorted[0]?.id??null)
  const section=sorted.find(s=>s.id===current)
@@ -62,8 +65,8 @@ export function PageEditor({roomId,sections,documents,canEdit,canReview,busy,run
     {lang==='en'&&en.length===0&&<button type="button" className="be-add" onClick={()=>{setEn(structuredClone(fr).map(x=>({...x,id:newId()})));setDirty(true)}}><Undo2 size={14}/>Copier la version française pour traduire</button>}
    </div></details>}
    <div className={'pe-canvas mode-'+mode}>
-    {mode!=='preview'&&canEdit&&<div className="pe-edit">{lang==='en'&&en.length===0?<p className="be-empty">Pas encore de version anglaise : la version française sera utilisée. Ouvrez « Réglages » pour la copier et la traduire.</p>:<BlockEditor value={blocks} onChange={setBlocks} documents={documents}/>}</div>}
-    {(mode!=='edit'||!canEdit)&&<div className="pe-preview" {...(b?{style:{'--product':b.accent,'--product-tint':b.tint} as React.CSSProperties}:{})}><p className="pe-preview-label"><Eye size={13}/>Aperçu investisseur</p><header className="dr-article-head">{b?<img className="dr-article-logo" src={b.logo} alt="" width={84} height={84}/>:null}<div><p className="journey-kicker">{categories.find(c=>c[0]===meta.category)?.[1]}</p><h1>{(lang==='en'&&meta.titleEn)||meta.titleFr||'Sans titre'}</h1></div></header><BlockView blocks={lang==='en'&&en.length?en:fr} lang={lang} documents={documents}/></div>}
+    {mode!=='preview'&&canEdit&&<div className="pe-edit">{lang==='en'&&en.length===0?<p className="be-empty">Pas encore de version anglaise : la version française sera utilisée. Ouvrez « Réglages » pour la copier et la traduire.</p>:<BlockEditor value={blocks} onChange={setBlocks} documents={documents} images={images} upload={upload}/>}</div>}
+    {(mode!=='edit'||!canEdit)&&<div className="pe-preview" {...(b?{style:{'--product':b.accent,'--product-tint':b.tint} as React.CSSProperties}:{})}><p className="pe-preview-label"><Eye size={13}/>Aperçu investisseur</p><header className="dr-article-head">{b?<img className="dr-article-logo" src={b.logo} alt="" width={84} height={84}/>:null}<div><p className="journey-kicker">{categories.find(c=>c[0]===meta.category)?.[1]}</p><h1>{(lang==='en'&&meta.titleEn)||meta.titleFr||'Sans titre'}</h1></div></header><BlockView blocks={lang==='en'&&en.length?en:fr} lang={lang} documents={documents} images={images}/></div>}
    </div>
   </section>:<section className="pe-main"><p className="be-empty">Sélectionnez une page ou créez-en une.</p></section>}
  </div>

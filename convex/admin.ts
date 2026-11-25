@@ -8,6 +8,7 @@ import { hasAdminCapability } from './lib/adminPolicy'
 import type { AdminCapability } from './lib/adminPolicy'
 import { v } from 'convex/values'
 import { requireMfa } from './mfa'
+import { imagesFor,imageIdsIn } from './media'
 const cap=v.union(v.literal('investors:read'),v.literal('access:manage'),v.literal('content:edit'),v.literal('content:review'),v.literal('finance:edit'),v.literal('finance:review'),v.literal('crm:read'),v.literal('crm:edit'),v.literal('qa:read'),v.literal('qa:reply'),v.literal('analytics:read'),v.literal('technical:read'))
 function enabled(){return process.env.ADC_STAGING_ADMIN_UI==='true'&&process.env.ADC_STAGING_CMS==='true'}
 export async function admin(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,capability?:AdminCapability){
@@ -79,7 +80,8 @@ export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>
    documents.push({id:document._id,titleFr:document.titleFr,titleEn:document.titleEn,category:document.category,status:document.status,version:version&&version.roomId===a.roomId&&version.documentId===document._id?{id:version._id,number:version.version,scanStatus:version.scanStatus,scanMethod:version.scanMethod??null,sha256:version.sha256,sizeBytes:version.sizeBytes,own:version.authorId===user._id}:null})
   }
  }
- return {room:{id:room._id,name:room.name,status:room.status},capabilities,applicants,sections,documents}
+ const images=await imagesFor(ctx,room._id,sections.flatMap(s=>s.latest?[...imageIdsIn(s.latest.blocksFr),...imageIdsIn(s.latest.blocksEn)]:[]))
+ return {room:{id:room._id,name:room.name,status:room.status},capabilities,applicants,sections,documents,images}
 }})
 export const grant=mutation({args:{roomId:v.id('rooms'),profileId:v.id('investorProfiles'),capability:v.union(v.literal('room:read'),v.literal('section:read')),sectionId:v.optional(v.id('sections')),effect:v.union(v.literal('allow'),v.literal('deny')),expiresAt:v.optional(v.number())},handler:async(ctx,a):Promise<Id<'accessGrants'>>=>{
  const {user}=await admin(ctx,a.roomId,'access:manage')
