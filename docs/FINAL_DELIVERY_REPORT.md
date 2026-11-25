@@ -35,3 +35,10 @@ Aucun identifiant de service n'est disponible dans ce conteneur cloud (pas de `C
 - Fournisseur antivirus et format du verdict signé.
 - Domaine d'envoi Resend et domaine applicatif.
 - Architecture pour documents > 3 Mio (upload direct via URL Convex à usage unique côté admin + vérification post-upload, recommandé).
+
+## Mise à jour 2026-11-25 — services configurés
+- **Convex** : projet `adc-investor-room` (équipe djedjelipatrick), déploiement dev `expert-bulldog-136`; schéma, index, composant Better Auth et fonctions déployés; `convex/_generated` régénéré officiellement. Variables : SITE_URL, BETTER_AUTH_SECRET (aléatoire), RESEND_API_KEY, MAIL_FROM.
+- **Vercel** : projet `adc-investor-room` (équipe ADC, hobby). URL : https://adc-investor-room.vercel.app. Variables : VITE_CONVEX_URL, VITE_CONVEX_SITE_URL, ADC_APP_ORIGIN, ADC_AUTH_ENABLED, VITE_ADC_AUTH_ENABLED. Build via preset Nitro `vercel`. Un secret « Protection Bypass for Automation » a été ajouté au projet par `vercel curl` (à révoquer si inutile).
+- **Resend** : domaine vérifié `klassci.com` (click/open tracking désactivés). Clé dédiée `adc-investor-room-recette`, permission envoi seul, limitée à ce domaine. Expéditeur recette : `investor-room@klassci.com` (à remplacer par un domaine ADC dédié avant production).
+- **Preuve** : POST `/api/auth/sign-in/magic-link` pour `delivered@resend.dev` → HTTP 200, e-mail « ADC Investor Room — Vérifiez votre accès » au statut `delivered` dans Resend.
+- **Design** : palette alignée sur adc-website (orange #e8590c / #c2410c, vert #1a5d3a, ivoire #fbf7f2).
