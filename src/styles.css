@@ -552,3 +552,6 @@ ul.bk-list{list-style:disc}ol.bk-list{list-style:decimal}.bk-list li{padding-lef
 @media(min-width:1000px){.adm-legacy form.room-card,.adm-legacy form.admin-card{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;align-items:end}.adm-legacy form.room-card>h2,.adm-legacy form.room-card>p,.adm-legacy form.room-card>button,.adm-legacy form.room-card>[role=alert],.adm-legacy form.room-card>[role=status],.adm-legacy form.room-card>label:has(textarea){grid-column:1/-1}}
 .adm-legacy .admin-list article h3{font-size:15px;margin:0 0 2px}
 .dp-scan.manual{color:#1d5fa8!important}
+.dr-nav-group{display:grid;gap:2px}.dr-nav-group .dr-nav-title{margin:12px 10px 4px}
+.bk-stats div{flex-direction:column;justify-content:flex-start}.bk-stats dd{order:-1;font-size:clamp(22px,2.4vw,30px);line-height:1.1}.bk-stats dt{margin-top:6px}
+.dr-side{overflow-x:hidden}.dr-nav,.dr-nav-group{min-width:0}.dr-nav-item{min-width:0;max-width:100%}.dr-nav-item span{min-width:0;flex:1}

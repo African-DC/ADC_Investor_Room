@@ -16,3 +16,4 @@ test-results/
 src/routeTree.gen.ts
 .vercel
 .env*
+.preview-data

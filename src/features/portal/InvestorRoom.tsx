@@ -60,8 +60,7 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
    <div className="dr-room"><span className="dr-label">{t.room}</span>{data.rooms.length>1?<select aria-label={t.choose} value={roomId??''} onChange={e=>location.assign('/investor?roomId='+encodeURIComponent(e.target.value))}><option value="" disabled>{t.choose}</option>{data.rooms.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select>:<strong>{data.room?.name??'—'}</strong>}</div>
    <nav className="dr-nav">
     <button className={'dr-nav-item'+(!active?' is-active':'')} aria-current={!active?'page':undefined} onClick={()=>go(null)}><LayoutDashboard size={18} aria-hidden="true"/><span>{t.overview}</span></button>
-    {sections.length>0&&<p className="dr-label dr-nav-title">{fr?'Rubriques':'Sections'}</p>}
-    {sections.map(navItem)}
+    {groupByCategory(sections).map(([c,items])=><div key={c} className="dr-nav-group"><p className="dr-label dr-nav-title">{categoryLabel(c,lang)}</p>{items.map(navItem)}</div>)}
    </nav>
    <div className="dr-user"><span className="dr-avatar" aria-hidden="true">{initials(data.name)}</span><div><strong>{data.name}</strong><a href="/access">{t.profile}</a></div><button className="dr-icon" onClick={()=>void logout()} aria-label={t.logout} title={t.logout}><LogOut size={17}/></button></div>
   </aside>
@@ -89,7 +88,7 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
      <SearchField label={t.search} clearLabel={fr?'Effacer la recherche':'Clear search'} value={search} onChange={v=>{setSearch(v);setActiveDocument(null);setActive(null)}}/>
      {visible.length?<section><h2 className="dr-h2">{search?(fr?'Résultats':'Results'):(fr?'Rubriques':'Sections')}</h2><div className="dr-grid">{visible.map((s,i)=>{const b=brandFor(s.slug),Icon=categoryIcon(s.category);return <button key={s.id} className={'dr-card'+(b?' is-product':'')} style={{...brandStyle(s.slug).style,animationDelay:Math.min(i,8)*70+'ms'}} data-product={brandStyle(s.slug)['data-product']} onClick={()=>go(s.id)}>
        <span className="dr-card-mark">{b?<img src={b.logo} alt="" width={b?56:24} height={56}/>:<Icon size={22} aria-hidden="true"/>}</span>
-       <span className="dr-card-cat">{categoryLabel(s.category,lang)}</span><span className="dr-card-title">{title(s)}</span><span className="dr-card-text">{body(s).slice(0,120)}{body(s).length>120?'…':''}</span><span className="dr-card-go">{fr?'Découvrir':'Explore'}<ArrowRight size={15}/></span></button>})}</div></section>
+       <span className="dr-card-cat">{categoryLabel(s.category,lang)}</span><span className="dr-card-title">{title(s)}</span><span className="dr-card-text">{excerpt(s,lang)}</span><span className="dr-card-go">{fr?'Découvrir':'Explore'}<ArrowRight size={15}/></span></button>})}</div></section>
      :<section className="dr-empty small"><Inbox size={28} aria-hidden="true"/><p>{search?t.none:t.empty}</p></section>}
      {!search&&data.documents.length>0&&<section><h2 className="dr-h2">{fr?'Documents autorisés':'Authorized documents'}</h2><ul className="dr-docs">{data.documents.map(doc=>{const href='/api/documents/file?roomId='+encodeURIComponent(data.room!.id)+'&documentId='+encodeURIComponent(doc.id);return <li key={doc.id}><span className="dr-doc-icon" aria-hidden="true"><FileText size={20}/><small>PDF</small></span><div><strong>{fr?doc.titleFr:doc.titleEn}</strong><span>{categoryLabel(doc.category,lang)} · v{doc.version} · {formatSize(doc.sizeBytes,lang)}</span></div><div className="dr-doc-actions"><button className="dr-btn" onClick={()=>setActiveDocument(doc.id)}><Eye size={16}/>{fr?'Consulter':'View'}</button>{doc.download&&<a className="dr-btn ghost" href={href+'&download=1'}><Download size={16}/>{fr?'Télécharger':'Download'}</a>}</div></li>})}</ul></section>}
      {selectedDocument&&data.room&&!search&&<PdfReader key={selectedDocument.id+'-'+selectedDocument.version} roomId={data.room.id} documentId={selectedDocument.id} title={fr?selectedDocument.titleFr:selectedDocument.titleEn} viewer={data.name} lang={lang} onClose={()=>setActiveDocument(null)}/>}
@@ -112,3 +111,10 @@ function formatSize(n:number,lang:Locale){return n>=1048576?(n/1048576).toLocale
 function brandStyle(slug?:string){const b=brandFor(slug);return b?{style:{'--product':b.accent,'--product-tint':b.tint} as CSSProperties,'data-product':b.name}:{style:undefined,'data-product':undefined}}
 
 function safeBlocks(json?:string|null):Block[]|null{try{return parseBlocks(json)}catch{return null}}
+
+function groupByCategory<T extends {category:string}>(items:T[]):[string,T[]][]{const m=new Map<string,T[]>();for(const i of items){m.set(i.category,[...(m.get(i.category)??[]),i])}return [...m.entries()]}
+function excerpt(s:Section,lang:Locale){
+ const blocks=safeBlocks(lang==='fr'?s.blocksFr:s.blocksEn??s.blocksFr)
+ const text=(blocks?.map(b=>b.type==='paragraph'?b.text:b.type==='quote'?b.text:b.type==='callout'?[b.title,b.text].filter(Boolean).join(' — '):'').find(Boolean))??(lang==='fr'?s.bodyFr:s.bodyEn)
+ const t=text.replace(/\s+/g,' ').trim();return t.length>140?t.slice(0,140).replace(/\s+\S*$/,'')+'…':t
+}
