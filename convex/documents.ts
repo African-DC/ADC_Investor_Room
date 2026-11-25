@@ -137,3 +137,25 @@ export const purgeTickets=internalMutation({args:{},handler:async ctx=>{
  for(const t of expired)await ctx.db.delete(t._id)
  return expired.length
 }})
+
+/** Recette-only manual review in place of an antivirus. A reviewer other than the uploader attests the exact SHA-256 they opened. */
+export const attestManualReview=mutation({args:{roomId:v.id('rooms'),documentId:v.id('documents'),sha256:v.string(),verdict:v.union(v.literal('clean'),v.literal('rejected'))},handler:async(ctx,a)=>{
+ if(process.env.ADC_MANUAL_SCAN_ALLOWED!=='true')throw new Error('Manual review disabled')
+ const {user}=await admin(ctx,a.roomId,'content:review')
+ const d=await ctx.db.get(a.documentId);if(!d||d.roomId!==a.roomId||d.status!=='draft'||!d.currentVersionId)throw new Error('Unavailable')
+ const version=await ctx.db.get(d.currentVersionId)
+ if(!version||version.documentId!==d._id||version.state!=='draft'||version.scanStatus!=='pending')throw new Error('Invalid scan transition')
+ if(version.authorId===user._id)throw new Error('Separate reviewer required')
+ if(version.sha256!==a.sha256)throw new Error('Fingerprint mismatch')
+ await ctx.db.patch(version._id,{scanStatus:a.verdict,scanMethod:'manual',scanBy:user._id,scanAt:Date.now()})
+ await ctx.db.insert('auditLogs',{actorId:user._id,event:'document.manual_review_'+a.verdict,resourceId:version._id,at:Date.now()})
+ return {ok:true}
+}})
+
+/** Reviewer preview of a DRAFT only (MFA + content:review). Published files are never served this way. */
+export const reviewUrl=query({args:{roomId:v.id('rooms'),documentId:v.id('documents')},handler:async(ctx,a)=>{
+ await admin(ctx,a.roomId,'content:review')
+ const d=await ctx.db.get(a.documentId);if(!d||d.roomId!==a.roomId||d.status!=='draft'||!d.currentVersionId)return null
+ const version=await ctx.db.get(d.currentVersionId);if(!version||version.state!=='draft'||!version.storageId)return null
+ return await ctx.storage.getUrl(version.storageId)
+}})

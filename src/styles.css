@@ -551,3 +551,4 @@ ul.bk-list{list-style:disc}ol.bk-list{list-style:decimal}.bk-list li{padding-lef
 .adm-brand{flex-direction:column;align-items:flex-start;gap:6px}.adm-brand img{width:120px;height:auto}
 @media(min-width:1000px){.adm-legacy form.room-card,.adm-legacy form.admin-card{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;align-items:end}.adm-legacy form.room-card>h2,.adm-legacy form.room-card>p,.adm-legacy form.room-card>button,.adm-legacy form.room-card>[role=alert],.adm-legacy form.room-card>[role=status],.adm-legacy form.room-card>label:has(textarea){grid-column:1/-1}}
 .adm-legacy .admin-list article h3{font-size:15px;margin:0 0 2px}
+.dp-scan.manual{color:#1d5fa8!important}

@@ -23,5 +23,6 @@ export const adminCommand=z.discriminatedUnion('kind',[
  base.extend({kind:z.literal('deleteGroup'),groupId:id}),
  base.extend({kind:z.literal('roomStatus'),status:z.enum(['draft','published'])}),
  base.extend({kind:z.literal('revokeLink'),linkId:id}),
+ base.extend({kind:z.literal('manualReview'),documentId:id,sha256:z.string().regex(/^[a-f0-9]{64}$/),verdict:z.enum(['clean','rejected'])}),
 ])
 export type AdminCommand=z.infer<typeof adminCommand>

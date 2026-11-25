@@ -29,7 +29,7 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   const room=data.roomId?identity.rooms.find(r=>r.id===data.roomId):identity.rooms[0]
   if(!room)return null
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
-  const metrics=await safe(bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id}));const contacts=await safe(bridge.fetchAuthQuery(api.crm.list,{roomId:room.id}));const questions=await safe(bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id}));const analytics=await safe(bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30}));const access=await safe(bridge.fetchAuthQuery(api.access.overview,{roomId:room.id}));const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true'}}
+  const metrics=await safe(bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id}));const contacts=await safe(bridge.fetchAuthQuery(api.crm.list,{roomId:room.id}));const questions=await safe(bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id}));const analytics=await safe(bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30}));const access=await safe(bridge.fetchAuthQuery(api.access.overview,{roomId:room.id}));const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
  }catch{return null}
 })
 const command=createServerFn({method:'POST'}).validator(adminCommand).handler(async({data})=>{
@@ -56,6 +56,7 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
    case 'saveGroup':await bridge.fetchAuthMutation(api.access.saveGroup,{roomId,groupId:data.groupId as Id<'investorGroups'>|undefined,name:data.name,profileIds:data.profileIds as Id<'investorProfiles'>[]});break
    case 'deleteGroup':await bridge.fetchAuthMutation(api.access.deleteGroup,{roomId,groupId:data.groupId as Id<'investorGroups'>});break
    case 'roomStatus':await bridge.fetchAuthMutation(api.access.setRoomStatus,{roomId,status:data.status});break
+   case 'manualReview':await bridge.fetchAuthMutation(api.documents.attestManualReview,{roomId,documentId:data.documentId as Id<'documents'>,sha256:data.sha256,verdict:data.verdict});break
    case 'revokeLink':await bridge.fetchAuthMutation(api.access.revokeLink,{roomId,linkId:data.linkId as Id<'accessLinks'>});break
    case 'archive':await bridge.fetchAuthMutation(api.admin.archive,{roomId,sectionId:data.sectionId as Id<'sections'>});break
   }
@@ -116,7 +117,12 @@ const createLink=createServerFn({method:'POST'}).validator(linkInput).handler(as
  const bridge=getAuthBridge(),origin=process.env.ADC_APP_ORIGIN;if(!bridge||!adminAllowed()||!sameOrigin()||!origin)return null
  try{const r=await bridge.fetchAuthAction(api.access.createLink,{...data,roomId:data.roomId as Id<'rooms'>});return r?{url:origin+'/invite#'+r.token}:null}catch{return null}
 })
+const reviewUrl=createServerFn({method:'POST'}).validator(z.object({roomId:z.string().max(128),documentId:z.string().max(128)})).handler(async({data})=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())return null
+ try{return await bridge.fetchAuthQuery(api.documents.reviewUrl,{roomId:data.roomId as Id<'rooms'>,documentId:data.documentId as Id<'documents'>})}catch{return null}
+})
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/connexion',search:{next:'/admin'}});return {state}
 },component:Page})
-function Page(){const {state}=Route.useRouteContext();if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});return next&&!next.mfa?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
+function Page(){const {state}=Route.useRouteContext();if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});return next&&!next.mfa?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
