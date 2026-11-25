@@ -17,5 +17,11 @@ export const adminCommand=z.discriminatedUnion('kind',[
  base.extend({kind:z.literal('draft'),slug:z.string().regex(/^[a-z0-9-]+$/).max(80),category:z.enum(['company','products','investment','finance','traction','team','technology','legal','compliance','documents','updates']),order:z.number().int().min(0).max(10000),titleFr:z.string().trim().min(1).max(180),titleEn:z.string().trim().min(1).max(180),bodyFr:z.string().trim().min(1).max(40000),bodyEn:z.string().trim().min(1).max(40000),blocksFr:z.string().max(250000).optional(),blocksEn:z.string().max(250000).optional(),source:z.string().trim().min(1).max(2000)}),
  base.extend({kind:z.literal('transition'),versionId:id,action:z.enum(['submit','publish'])}),
  base.extend({kind:z.literal('archive'),sectionId:id}),
+ base.extend({kind:z.literal('setAccess'),profileIds:z.array(id).min(1).max(200),targets:z.array(z.object({capability:z.enum(['room:read','section:read','document:read','document:download']),resourceId:id.optional()})).min(1).max(50),effect:z.enum(['allow','deny']),startsAt:z.number().finite().optional(),expiresAt:z.number().finite().optional(),groupId:id.optional()}),
+ base.extend({kind:z.literal('revokeMany'),grantIds:z.array(id).min(1).max(500)}),
+ base.extend({kind:z.literal('saveGroup'),groupId:id.optional(),name:z.string().trim().min(1).max(80),profileIds:z.array(id).max(200)}),
+ base.extend({kind:z.literal('deleteGroup'),groupId:id}),
+ base.extend({kind:z.literal('roomStatus'),status:z.enum(['draft','published'])}),
+ base.extend({kind:z.literal('revokeLink'),linkId:id}),
 ])
 export type AdminCommand=z.infer<typeof adminCommand>

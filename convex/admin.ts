@@ -58,7 +58,7 @@ export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>
   for(const link of links){const p=await ctx.db.get(link.profileId);if(!p)continue
    const grants=capabilities.includes('access:manage')?await ctx.db.query('accessGrants').withIndex('by_user_room',q=>q.eq('authUserId',p.authUserId).eq('roomId',a.roomId)).take(201):[]
    if(grants.length>200)throw new Error('Access review required')
-   applicants.push({id:p._id,name:p.name,email:p.email,organization:p.organization??'',grants:grants.map(g=>({id:g._id,capability:g.capability,resourceId:g.resourceId??null,effect:g.effect,expiresAt:g.expiresAt??null,revokedAt:g.revokedAt??null}))})
+   applicants.push({id:p._id,name:p.name,email:p.email,organization:p.organization??'',grants:grants.map(g=>({id:g._id,capability:g.capability,resourceId:g.resourceId??null,effect:g.effect,startsAt:g.startsAt??null,expiresAt:g.expiresAt??null,revokedAt:g.revokedAt??null}))})
   }
  }
  const sections=[]

@@ -47,7 +47,7 @@ export function Welcome(){
   if(!parsed.success){go(1);setErrors(parsed.error.issues.map(i=>String(i.path[0])));return}
   setSending(true);setSendError(false)
   try{
-   const result=await authClient.signIn.magicLink({email:parsed.data.email,name:parsed.data.name,callbackURL:'/access',newUserCallbackURL:'/access',errorCallbackURL:'/'})
+   const result=await authClient.signIn.magicLink({email:parsed.data.email,name:parsed.data.name,callbackURL:pendingInvite()?'/invite':'/access',newUserCallbackURL:pendingInvite()?'/invite':'/access',errorCallbackURL:'/'})
    if(result.error)throw new Error('Request failed')
    setSent(true);sound.play('success')
   }catch{setSendError(true)}finally{setSending(false)}
@@ -92,3 +92,5 @@ export function Welcome(){
   <footer className="journey-footer"><span><LockKeyhole size={14}/>{enabled?j.privacy:t.privacy}</span><span>African Digit Consulting © 2026</span><span className="journey-footer-edition">Investor Room</span></footer>
  </main>
 }
+
+function pendingInvite(){try{const v=JSON.parse(localStorage.getItem('adc-invite')??'null');return !!v&&Date.now()-v.at<86400000}catch{return false}}
