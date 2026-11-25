@@ -22,6 +22,8 @@ import type * as lib_adminPolicy from "../lib/adminPolicy.js";
 import type * as lib_emailTemplate from "../lib/emailTemplate.js";
 import type * as lib_hash from "../lib/hash.js";
 import type * as lib_roomPolicy from "../lib/roomPolicy.js";
+import type * as lib_totp from "../lib/totp.js";
+import type * as mfa from "../mfa.js";
 import type * as portal from "../portal.js";
 import type * as qa from "../qa.js";
 import type * as stagingCms from "../stagingCms.js";
@@ -47,6 +49,8 @@ declare const fullApi: ApiFromModules<{
   "lib/emailTemplate": typeof lib_emailTemplate;
   "lib/hash": typeof lib_hash;
   "lib/roomPolicy": typeof lib_roomPolicy;
+  "lib/totp": typeof lib_totp;
+  mfa: typeof mfa;
   portal: typeof portal;
   qa: typeof qa;
   stagingCms: typeof stagingCms;

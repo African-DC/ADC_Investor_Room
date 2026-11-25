@@ -1,6 +1,7 @@
 import { createFileRoute,notFound } from '@tanstack/react-router'
 import { useState } from 'react'
 import { InvestorRoom } from '../features/portal/InvestorRoom'
+import { MfaGate } from '../features/admin/MfaGate'
 import type { Overview } from '../features/portal/InvestorRoom'
 // DEV-ONLY visual harness. Synthetic placeholders, no real ADC content. 404 in production builds.
 const lorem='Contenu de démonstration (fictif). Cette section sera rédigée et validée par ADC avant publication.\n\nLe texte définitif proviendra du CMS après relecture par un second administrateur.'
@@ -14,5 +15,6 @@ function Preview(){
  const {state}=Route.useSearch()
  const [data]=useState<Overview>(()=>state==='nda'?{...base,nda:{version:'NDA-2026-01',textFr:'Texte d’accord de confidentialité fictif pour la démonstration.\n\n'.repeat(8),textEn:'Demo NDA text.'}}:state==='noroom'?{...base,room:null,rooms:[],sections:[],documents:[]}:state==='empty'?{...base,sections:[],documents:[]}:base)
  const ok=async()=>({ok:true})
+ if(state.startsWith('mfa'))return <MfaGate status={{name:'Admin Démo',email:'admin@example.com',enrolled:state==='mfa-verify',verified:false,lockedUntil:null,recoveryLeft:10}} begin={async()=>({uri:'otpauth://totp/ADC%20Investor%20Room:admin@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=ADC%20Investor%20Room',secret:'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'})} confirm={async()=>({ok:true,recovery:['ABCD-EFGH','JKLM-NPQR','STUV-WXYZ','2345-6789','A2B3-C4D5','E6F7-G2H3','J4K5-L6M7','N2P3-Q4R5','S6T7-U2V3','W4X5-Y6Z7']})} verify={async()=>({ok:false})}/>
  return <InvestorRoom initial={data} refresh={async()=>data} acceptNda={ok} questionRead={async()=>null} questionSend={ok} engagement={ok} intelligence={async()=>({status:'empty'} as never)}/>
 }

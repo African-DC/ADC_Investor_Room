@@ -7,6 +7,7 @@ import { authComponent } from './auth'
 import { hasAdminCapability } from './lib/adminPolicy'
 import type { AdminCapability } from './lib/adminPolicy'
 import { v } from 'convex/values'
+import { requireMfa } from './mfa'
 const cap=v.union(v.literal('investors:read'),v.literal('access:manage'),v.literal('content:edit'),v.literal('content:review'),v.literal('finance:edit'),v.literal('finance:review'),v.literal('crm:read'),v.literal('crm:edit'),v.literal('qa:read'),v.literal('qa:reply'),v.literal('analytics:read'),v.literal('technical:read'))
 function enabled(){return process.env.ADC_STAGING_ADMIN_UI==='true'&&process.env.ADC_STAGING_CMS==='true'}
 export async function admin(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,capability?:AdminCapability){
@@ -15,6 +16,7 @@ export async function admin(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,capabili
  if(!user?.emailVerified)throw new Error('Unauthorized')
  const membership=await ctx.db.query('stagingAdminMemberships').withIndex('by_user_room',q=>q.eq('authUserId',user._id).eq('roomId',roomId)).unique()
  if(!hasAdminCapability(membership,user._id,roomId,capability))throw new Error('Unauthorized')
+ await requireMfa(ctx,user._id)
  return {user,membership:membership!}
 }
 export const provision=internalMutation({args:{roomId:v.id('rooms'),authUserId:v.string(),capabilities:v.array(cap)},handler:async(ctx,a)=>{

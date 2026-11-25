@@ -9,13 +9,19 @@ import { adminCommand } from '../features/admin/contracts'
 import { targetsFor,draftText } from '../features/technical/model'
 import { getTechnicalSnapshot } from '../server/githubReporting'
 import { AdminRoom } from '../features/admin/AdminRoom'
+import { MfaGate } from '../features/admin/MfaGate'
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
+// Admin UI is allowed wherever the flag is on: every privileged Convex call enforces session-bound TOTP MFA.
+const adminAllowed=()=>process.env.ADC_STAGING_ADMIN_UI==='true'
 const search=z.object({roomId:z.string().max(128).optional()})
 const load=createServerFn({method:'GET'}).validator(search).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge()
- if(!bridge||(process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.VERCEL_ENV==='production'))return null
+ if(!bridge||!adminAllowed())return null
  try{
+  const mfa=await bridge.fetchAuthQuery(api.mfa.status,{})
+  if(!mfa)return null
+  if(!mfa.verified)return {mfa} as const
   const identity=await bridge.fetchAuthQuery(api.admin.rooms,{})
   if(!identity)return null
   const room=data.roomId?identity.rooms.find(r=>r.id===data.roomId):identity.rooms[0]
@@ -27,7 +33,7 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
 const command=createServerFn({method:'POST'}).validator(adminCommand).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge(),origin=process.env.ADC_APP_ORIGIN
- if(!bridge||(process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.VERCEL_ENV==='production')||!origin||getRequestHeader('origin')!==origin)return {ok:false}
+ if(!bridge||!adminAllowed()||!origin||getRequestHeader('origin')!==origin)return {ok:false}
  const roomId=data.roomId as Id<'rooms'>
  try{
   switch(data.kind){
@@ -51,19 +57,19 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
 const history=createServerFn({method:'GET'}).validator(z.object({roomId:z.string().max(128),profileId:z.string().max(128)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge()
- if(!bridge||process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.VERCEL_ENV==='production')return null
+ if(!bridge||!adminAllowed())return null
  try{return await bridge.fetchAuthQuery(api.crm.history,{roomId:data.roomId as Id<'rooms'>,profileId:data.profileId as Id<'investorProfiles'>})}catch{return null}
 })
 const questionRead=createServerFn({method:'GET'}).validator(z.object({roomId:z.string().max(128),questionId:z.string().max(128)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge()
- if(!bridge||process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.VERCEL_ENV==='production')return null
+ if(!bridge||!adminAllowed())return null
  try{return await bridge.fetchAuthQuery(api.qa.adminRead,{roomId:data.roomId as Id<'rooms'>,questionId:data.questionId as Id<'questions'>})}catch{return null}
 })
 const technical=createServerFn({method:'POST'}).validator(z.object({roomId:z.string().max(128),key:z.string().regex(/^[a-z0-9-]{1,40}$/),draft:z.boolean()})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge(),origin=process.env.ADC_APP_ORIGIN
- if(!bridge||!origin||getRequestHeader('origin')!==origin||process.env.ADC_STAGING_ADMIN_UI!=='true'||process.env.VERCEL_ENV==='production'||process.env.ADC_GITHUB_REPORTING_ENABLED!=='true')return null
+ if(!bridge||!origin||getRequestHeader('origin')!==origin||!adminAllowed()||process.env.ADC_GITHUB_REPORTING_ENABLED!=='true')return null
  const roomId=data.roomId as Id<'rooms'>
  try{
   const rights=await bridge.fetchAuthQuery(api.admin.technicalAccess,{roomId})
@@ -79,7 +85,24 @@ const technical=createServerFn({method:'POST'}).validator(z.object({roomId:z.str
   return {snapshot,drafted:data.draft}
  }catch{return null}
 })
+const mfaCode=z.object({code:z.string().trim().min(6).max(12)})
+const sameOrigin=()=>{const origin=process.env.ADC_APP_ORIGIN;return !!origin&&getRequestHeader('origin')===origin}
+const mfaBegin=createServerFn({method:'POST'}).handler(async()=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())return null
+ try{return await bridge.fetchAuthAction(api.mfa.beginEnroll,{})}catch{return null}
+})
+const mfaConfirm=createServerFn({method:'POST'}).validator(mfaCode).handler(async({data})=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())return {ok:false}
+ try{return await bridge.fetchAuthAction(api.mfa.confirmEnroll,{code:data.code})}catch{return {ok:false}}
+})
+const mfaVerify=createServerFn({method:'POST'}).validator(mfaCode).handler(async({data})=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())return {ok:false}
+ try{return await bridge.fetchAuthAction(api.mfa.verify,{code:data.code})}catch{return {ok:false}}
+})
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/'});return {state}
 },component:Page})
-function Page(){const {state}=Route.useRouteContext();return <AdminRoom key={state.dashboard.room.id} initial={state} reload={()=>load({data:{roomId:state.dashboard.room.id}})} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
+function Page(){const {state}=Route.useRouteContext();if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom key={state.dashboard.room.id} initial={state} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});return next&&!next.mfa?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}

@@ -22,4 +22,6 @@ export default defineSchema({
  engagement:defineTable({roomId:v.id('rooms'),authUserId:v.string(),day:v.string(),kind:v.union(v.literal('section_open'),v.literal('document_view_authorized'),v.literal('document_download_authorized')),resourceId:v.string(),at:v.number()}).index('by_dedup',['roomId','authUserId','day','kind','resourceId']).index('by_room_day',['roomId','day']).index('by_at',['at']),
  aiQuotas:defineTable({roomId:v.id('rooms'),authUserId:v.string(),hour:v.number(),count:v.number()}).index('by_room_user_hour',['roomId','authUserId','hour']).index('by_hour',['hour']),
  auditLogs:defineTable({actorId:v.string(),event:v.string(),resourceId:v.optional(v.string()),at:v.number()}).index('by_actor',['actorId']),
+ adminMfa:defineTable({authUserId:v.string(),secretSealed:v.string(),status:v.union(v.literal('pending'),v.literal('active')),lastStep:v.number(),recoveryHashes:v.array(v.string()),failures:v.number(),lockedUntil:v.optional(v.number()),createdAt:v.number(),activatedAt:v.optional(v.number())}).index('by_user',['authUserId']),
+ adminMfaProofs:defineTable({authUserId:v.string(),sessionId:v.string(),verifiedAt:v.number(),expiresAt:v.number(),method:v.union(v.literal('totp'),v.literal('recovery'))}).index('by_session',['sessionId']).index('by_user',['authUserId']),
 })
