@@ -72,3 +72,4 @@ h1,h2{font-family:Fraunces,Georgia,serif;letter-spacing:-.04em;font-weight:600;l
 @media(max-width:380px){.journey-wordmark>span{max-width:96px}.journey-step-label{font-size:8px}.journey-panel{padding:16px}.journey-fields{gap:10px}}
 @media(max-height:600px) and (max-width:760px){.journey-logo-reveal{width:145px}.journey-hero{gap:8px}.journey-panel{padding:16px}.journey-progress{margin-bottom:15px}.journey-fields{gap:9px}.journey-stage{padding:10px 0}}
 @media(prefers-reduced-motion:reduce){.journey-atmosphere span{transform:translate(-50%,-50%)}.journey-primary:hover:not(:disabled),.journey-primary:hover:not(:disabled) svg{transform:none}}
+.journey-hero-copy .products{justify-content:center}
