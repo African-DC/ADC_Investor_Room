@@ -29,7 +29,6 @@ export function Welcome(){
  const enabled=import.meta.env.VITE_ADC_AUTH_ENABLED==='true'
  const [profile,setProfile]=useState<Profile>(emptyProfile)
  const [errors,setErrors]=useState<string[]>([])
- const [showExisting,setShowExisting]=useState(false)
  const heading=useRef<HTMLHeadingElement>(null),previousStep=useRef(0)
  const sound=useJourneySound()
  const t=copy[lang],j=journey[lang]
@@ -59,7 +58,7 @@ export function Welcome(){
   go(Math.min(4,step+1))
  }
  function skip(){if(step===2)setProfile(p=>({...p,organization:'',type:'',role:''}));else setProfile(p=>({...p,phone:'',linkedin:''}));go(step+1)}
- function reset(){setProfile({...emptyProfile});setSent(false);setShowExisting(false);go(0)}
+ function reset(){setProfile({...emptyProfile});setSent(false);go(0)}
  function field(key:Exclude<keyof Profile,'type'>,label:string,type='text',required=false){return <label className="field" key={key}><span>{label}{required?' *':<small> · {t.optional}</small>}</span><Input type={type} required={required} autoComplete={key==='name'?'name':key==='email'?'email':key==='organization'?'organization':key==='phone'?'tel':'off'} aria-invalid={errors.includes(key)} aria-describedby={errors.includes(key)?key+'-error':undefined} maxLength={key==='email'?254:key==='linkedin'?300:key==='phone'?40:key==='name'?120:160} value={profile[key]} onValueChange={value=>update(key,value)}/>{errors.includes(key)&&<span className="field-error" id={key+'-error'}>{fieldErrors[lang][key]}</span>}</label>}
  return <main className={'journey-shell '+(step===0?'journey-welcome':'journey-inner')+(sent?' is-sent':'')} data-step={step} style={{'--p':step/4} as CSSProperties}>
   <div className="journey-atmosphere" aria-hidden="true"><span/><span/><span/><i/><i/></div>
@@ -70,7 +69,7 @@ export function Welcome(){
   {step===0?<section className="journey-hero" key="welcome">
    <div className="journey-logo-reveal"><div className="journey-logo-halo" aria-hidden="true"/><svg className="journey-logo-ring" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="48"/></svg><img className="journey-hero-logo" src="/adc-logo-mark.png" alt="African Digit Consulting" width="1254" height="1254" fetchPriority="high"/></div>
    <div className="journey-hero-copy"><p className="journey-kicker">{j.kicker[0]}</p><h1 ref={heading} tabIndex={-1}>{t.welcome}</h1><p className="journey-vision">{j.vision}</p><p className="journey-description">{t.description}</p><div className="products" aria-label={lang==='fr'?'Nos produits':'Our products'}><span><img src="/logo-klassci.png" alt="" width={28} height={28}/>KLASSCI</span><span><img src="/logo-wouri.png" alt="" width={28} height={28}/>WOURI</span></div></div>
-   <div className="journey-hero-actions"><button className="primary journey-primary" disabled={!ready} onClick={()=>next()}>{t.start}<ArrowRight size={20}/></button><button className="secondary journey-link" type="button" onClick={()=>setShowExisting(v=>!v)} aria-expanded={showExisting}>{t.existing}<ArrowUpRight size={15}/></button>{showExisting&&<p role="status" className="journey-existing">{enabled?(lang==='fr'?'Utilisez votre adresse e-mail habituelle pour recevoir un nouveau lien.':'Use your usual email to request a new link.'):t.existingHint}</p>}</div>
+   <div className="journey-hero-actions"><button className="primary journey-primary" disabled={!ready} onClick={()=>next()}>{t.start}<ArrowRight size={20}/></button><a className="secondary journey-link" href="/connexion">{t.existing}<ArrowUpRight size={15}/></a></div>
    <p className="journey-quiet">{j.minutes}</p>
   </section>:<section className="journey-stage">
    <aside className={'journey-story '+direction} key={'story'+step}><span className="journey-numeral" aria-hidden="true">0{step+1}</span><p className="journey-kicker">{j.journey} · 0{step+1}</p><img className="journey-story-logo" src="/adc-logo-mark.png" alt="" width="1254" height="1254"/><p className="journey-story-title">{j.side[step]}</p><p className="journey-story-text">{t.tag}</p><div className="journey-story-rule"/><p className="journey-quiet"><LockKeyhole size={15}/>{j.privacy}</p></aside>

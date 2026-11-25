@@ -27,7 +27,7 @@ const saveProfile=createServerFn({method:'POST'}).validator(detailsSchema.extend
  if(!bridge)return {ok:false}
  try{await bridge.fetchAuthMutation(api.investors.registerVerified,{...data,investorType:data.investorType});return {ok:true}}catch{return {ok:false}}
 })
-export const Route=createFileRoute('/access')({headers:privateHeaders,beforeLoad:async()=>{const session=await verifiedSession();if(!session)throw redirect({to:'/'});return {session}},component:Access})
+export const Route=createFileRoute('/access')({headers:privateHeaders,beforeLoad:async()=>{const session=await verifiedSession();if(!session)throw redirect({to:'/connexion',search:{next:'/access'}});return {session}},component:Access})
 function Access(){
  const {session}=Route.useRouteContext()
  const [details,setDetails]=useState<z.infer<typeof detailsSchema>>(()=>{const result=detailsSchema.safeParse(session.details);return result.success?result.data:{organization:'',investorType:'',position:'',phone:'',linkedin:''}})

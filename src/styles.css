@@ -418,3 +418,27 @@ ul.bk-list{list-style:disc}ol.bk-list{list-style:decimal}.bk-list li{padding-lef
 @media(max-width:1000px){.am-grid,.am-grid.wide{grid-template-columns:1fr}.am-form{grid-template-columns:1fr}}
 .dr-btn{--accent-d:#c2410c}.dr-btn:not(.ghost){background:#c2410c;border-color:#c2410c;color:#fff}.dr-btn.ghost{background:#fff;color:#c2410c;border-color:#c2410c}.dr-btn.pe-publish{background:#1a5d3a;border-color:#1a5d3a}.dr-btn.danger-solid{background:#9f3030;border-color:#9f3030}.dr-btn.ghost.danger{color:#9f3030;border-color:#e6bcbc}
 .am-table td svg{display:inline;margin-right:4px}.am-card>.dr-btn{width:max-content}
+/* Welcome hero must never be clipped under the footer: it keeps its natural height and the shell scrolls. */
+.journey-hero{flex:1 0 auto}
+.login-input{font-size:17px;padding:13px 14px}
+@media(min-width:761px) and (max-height:820px){
+ .journey-logo-reveal{width:clamp(150px,28vh,260px)}
+ .journey-hero{gap:6px;padding:4px 0}
+ .journey-shell h1{font-size:clamp(34px,4.4vw,60px)}
+ .journey-vision{margin:4px 0;font-size:clamp(17px,2vw,24px)}
+ .journey-hero .products{margin-top:12px}
+ .journey-hero-actions .journey-primary{margin-top:10px}
+ .journey-hero .journey-quiet{display:none}
+}
+@media(min-width:761px) and (max-height:660px){
+ .journey-logo-reveal{width:clamp(120px,24vh,190px)}
+ .journey-description{display:none}
+}
+@media(min-width:761px){.journey-logo-reveal{width:clamp(160px,30vh,340px)}.journey-hero{padding:clamp(6px,1.4vh,20px) 0;gap:clamp(6px,1.4vh,16px)}}
+@media(min-width:761px) and (max-height:820px){.journey-logo-reveal{width:clamp(130px,24vh,220px)}}
+@media(min-width:761px) and (max-height:700px){.journey-description{display:none}.journey-logo-reveal{width:clamp(120px,22vh,170px)}}
+@media(max-width:760px) and (max-height:760px){.journey-logo-reveal{width:clamp(130px,26vh,210px)}.journey-hero .journey-quiet{display:none}}
+.journey-shell:before{inset:0}
+.frame-stage{flex:1 0 auto}
+@media(max-height:760px){.frame-card{padding:clamp(18px,3vh,30px) clamp(22px,4vw,40px);gap:6px}.frame-emblem{width:56px;height:56px;border-radius:18px;margin-bottom:0}.frame-emblem svg{width:24px;height:24px}.frame-card h1{font-size:clamp(28px,3.4vw,40px)}.frame-lead{margin:0 0 4px;line-height:1.5}.frame-stage{padding:8px 0}.frame-numeral{font-size:96px}}
+@media(min-width:761px) and (max-height:700px){.journey-logo-reveal{width:clamp(140px,22vh,170px)}}

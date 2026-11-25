@@ -64,7 +64,7 @@ const askIntelligence=createServerFn({method:'POST'}).validator(z.object({roomId
  }catch{return unavailable}
 })
 export const Route=createFileRoute('/investor')({headers,validateSearch:roomSearch,beforeLoad:async({search})=>{
- const data=await getOverview({data:search});if(!data)throw redirect({to:'/'});return {overview:data}
+ const data=await getOverview({data:search});if(!data)throw redirect({to:'/connexion',search:{next:'/investor'}});return {overview:data}
 },component:Page})
 function Page(){
  const {overview}=Route.useRouteContext()

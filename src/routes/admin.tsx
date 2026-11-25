@@ -117,6 +117,6 @@ const createLink=createServerFn({method:'POST'}).validator(linkInput).handler(as
  try{const r=await bridge.fetchAuthAction(api.access.createLink,{...data,roomId:data.roomId as Id<'rooms'>});return r?{url:origin+'/invite#'+r.token}:null}catch{return null}
 })
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
- const state=await load({data:search});if(!state)throw redirect({to:'/'});return {state}
+ const state=await load({data:search});if(!state)throw redirect({to:'/connexion',search:{next:'/admin'}});return {state}
 },component:Page})
 function Page(){const {state}=Route.useRouteContext();if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});return next&&!next.mfa?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
