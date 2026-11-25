@@ -73,3 +73,76 @@ h1,h2{font-family:Fraunces,Georgia,serif;letter-spacing:-.04em;font-weight:600;l
 @media(max-height:600px) and (max-width:760px){.journey-logo-reveal{width:145px}.journey-hero{gap:8px}.journey-panel{padding:16px}.journey-progress{margin-bottom:15px}.journey-fields{gap:9px}.journey-stage{padding:10px 0}}
 @media(prefers-reduced-motion:reduce){.journey-atmosphere span{transform:translate(-50%,-50%)}.journey-primary:hover:not(:disabled),.journey-primary:hover:not(:disabled) svg{transform:none}}
 .journey-hero-copy .products{justify-content:center}
+/* ===== Investor journey — experience layer ===== */
+.journey-shell{height:100vh;height:100dvh;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-behavior:smooth}
+.journey-hero,.journey-stage{min-height:0}
+/* Atmosphere moves forward with the journey */
+.journey-atmosphere{opacity:.9;transition:transform 1.2s cubic-bezier(.2,.8,.2,1)}
+.journey-atmosphere span{border-color:#e8590c26;transition:transform 1.2s cubic-bezier(.2,.8,.2,1),border-color 1.2s}
+.journey-shell[data-step="1"] .journey-atmosphere span{transform:translate(-62%,-48%) scale(1.08)}
+.journey-shell[data-step="2"] .journey-atmosphere span{transform:translate(-70%,-52%) scale(1.16)}
+.journey-shell[data-step="3"] .journey-atmosphere span{transform:translate(-78%,-46%) scale(1.24)}
+.journey-shell[data-step="4"] .journey-atmosphere span{transform:translate(-50%,-50%) scale(1.32);border-color:#1a5d3a26}
+.journey-shell:before{content:"";position:absolute;inset:-20%;z-index:-2;pointer-events:none;background:radial-gradient(40% 35% at calc(20% + var(--p,0)*60%) 30%,#e8590c14,transparent 70%),radial-gradient(35% 30% at calc(80% - var(--p,0)*50%) 80%,#1a5d3a10,transparent 70%);transition:background-position 1s}
+/* Hero: ADC logo as the protagonist */
+.journey-logo-reveal{width:clamp(220px,44vh,420px);max-width:82vw;animation:adc-logo-hero 1.4s cubic-bezier(.16,1,.3,1) both}
+.journey-hero-logo{mix-blend-mode:multiply;filter:none}
+.journey-logo-halo{inset:8%;border:0;background:radial-gradient(circle,#fff 0%,#fff0 70%);box-shadow:0 0 120px 20px #e8590c1f;animation:adc-breathe 5s 1.4s ease-in-out infinite}
+.journey-logo-ring{position:absolute;inset:-2%;width:104%;height:104%;transform:rotate(-90deg);overflow:visible}
+.journey-logo-ring circle{fill:none;stroke:#e8590c;stroke-width:.6;stroke-linecap:round;stroke-dasharray:302;stroke-dashoffset:302;animation:adc-draw 1.8s .5s cubic-bezier(.65,0,.35,1) forwards;opacity:.75}
+.journey-hero-copy>*{animation:adc-rise .8s cubic-bezier(.16,1,.3,1) both}
+.journey-hero-copy>:nth-child(1){animation-delay:.9s}.journey-hero-copy>:nth-child(2){animation-delay:1s}.journey-hero-copy>:nth-child(3){animation-delay:1.12s}.journey-hero-copy>:nth-child(4){animation-delay:1.22s}.journey-hero-copy>:nth-child(5){animation-delay:1.32s}
+.journey-hero-actions{animation:adc-rise .8s 1.45s cubic-bezier(.16,1,.3,1) both}
+.journey-hero .journey-quiet{animation:adc-rise .8s 1.6s both;flex-wrap:wrap}
+.journey-hero h1{background:linear-gradient(100deg,#1a0f06 40%,#c2410c 50%,#1a0f06 60%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:adc-rise .8s 1s cubic-bezier(.16,1,.3,1) both,adc-sheen 2.2s 1.9s ease-out both}
+.journey-sound-invite{display:inline-flex;align-items:center;gap:6px;border:1px solid #e8590c55;background:#fff;color:#c2410c;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:650;animation:adc-pulse 2.4s 2.4s ease-in-out 3}
+.journey-primary{position:relative;overflow:hidden}
+.journey-primary:after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,#ffffff40 50%,transparent 70%);transform:translateX(-120%);transition:transform .7s}
+.journey-primary:hover:not(:disabled):after{transform:translateX(120%)}
+/* The path: continuous track with a travelling spark */
+.journey-track{position:relative;height:4px;border-radius:8px;background:#efe6dc;margin:4px 0 -10px;overflow:visible}
+.journey-track-fill{position:absolute;inset:0 auto 0 0;width:calc(var(--p,0)*100%);border-radius:8px;background:linear-gradient(90deg,#e8590c,#c2410c);transition:width .9s cubic-bezier(.65,0,.35,1)}
+.journey-track-spark{position:absolute;top:50%;left:calc(var(--p,0)*100%);width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#fff;border:3px solid #e8590c;box-shadow:0 0 0 6px #e8590c22,0 0 18px #e8590c88;transition:left .9s cubic-bezier(.65,0,.35,1)}
+.journey-progress .journey-step-line{opacity:0;height:0}
+.journey-progress{margin-top:0}
+.journey-progress li{text-align:center;position:relative;padding-top:14px}
+.journey-step-label{justify-content:center}
+.journey-progress li:first-child .journey-step-label{justify-content:flex-start}.journey-progress li:last-child .journey-step-label{justify-content:flex-end}
+.journey-progress .complete .journey-step-label svg{animation:adc-pop .45s cubic-bezier(.34,1.56,.64,1) both}
+/* Chapters: directional cinematic transitions */
+.journey-chapter{animation:adc-enter-fwd .7s cubic-bezier(.16,1,.3,1) both}
+.journey-chapter.back{animation-name:adc-enter-back}
+.journey-chapter>*,.journey-chapter form>*,.journey-fields>*{animation:adc-rise .6s cubic-bezier(.16,1,.3,1) both}
+.journey-chapter form>:nth-child(2){animation-delay:.06s}.journey-chapter form>:nth-child(3){animation-delay:.1s}
+.journey-fields>:nth-child(1){animation-delay:.16s}.journey-fields>:nth-child(2){animation-delay:.24s}.journey-fields>:nth-child(3){animation-delay:.32s}
+.journey-chapter form>.journey-primary{animation-delay:.38s}.journey-chapter form>.actions{animation-delay:.44s}
+.journey-story{position:relative;animation:adc-enter-fwd .8s cubic-bezier(.16,1,.3,1) both}
+.journey-story.back{animation-name:adc-enter-back}
+.journey-numeral{position:absolute;right:-6%;top:-18%;z-index:-1;font:700 clamp(120px,22vw,260px)/1 Georgia,serif;color:transparent;-webkit-text-stroke:1px #e8590c40;letter-spacing:-.06em;animation:adc-numeral 1s cubic-bezier(.16,1,.3,1) both}
+.journey-story-logo{mix-blend-mode:multiply;animation:adc-float 6s ease-in-out infinite}
+.journey-story-rule{animation:adc-grow .9s .3s cubic-bezier(.16,1,.3,1) both;transform-origin:left}
+.journey-panel{backdrop-filter:blur(10px);transition:box-shadow .5s}
+.journey-panel:focus-within{box-shadow:0 30px 90px #1a0f0614,0 0 0 1px #e8590c22}
+.journey-fields input:focus,.journey-fields select:focus{transform:translateY(-1px)}
+.journey-fields input,.journey-fields select{transition:border-color .2s,box-shadow .2s,transform .2s}
+/* Celebration */
+.journey-mail{position:relative}
+.journey-mail.is-sent{animation:adc-pop .6s cubic-bezier(.34,1.56,.64,1) both;box-shadow:0 0 0 10px #1a5d3a14}
+.journey-burst{position:absolute;inset:50%}
+.journey-burst i{position:absolute;width:7px;height:7px;border-radius:50%;background:#e8590c;transform:rotate(var(--a)) translateY(0);animation:adc-burst .9s cubic-bezier(.16,1,.3,1) forwards}
+.journey-burst i:nth-child(3n){background:#1a5d3a}.journey-burst i:nth-child(3n+1){background:#f08a4b;width:5px;height:5px}
+@keyframes adc-logo-hero{0%{opacity:0;transform:scale(.72);filter:blur(14px)}60%{opacity:1;filter:blur(0)}100%{opacity:1;transform:scale(1)}}
+@keyframes adc-draw{to{stroke-dashoffset:0}}
+@keyframes adc-breathe{50%{transform:scale(1.06);opacity:.8}}
+@keyframes adc-rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+@keyframes adc-sheen{from{background-position:100% 0}to{background-position:0 0}}
+@keyframes adc-pulse{50%{box-shadow:0 0 0 8px #e8590c18}}
+@keyframes adc-enter-fwd{from{opacity:0;transform:translateX(70px);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
+@keyframes adc-enter-back{from{opacity:0;transform:translateX(-70px);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
+@keyframes adc-numeral{from{opacity:0;transform:translateY(40px) scale(.9)}to{opacity:1;transform:none}}
+@keyframes adc-float{50%{transform:translateY(-8px)}}
+@keyframes adc-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes adc-pop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes adc-burst{0%{opacity:1;transform:rotate(var(--a)) translateY(0)}100%{opacity:0;transform:rotate(var(--a)) translateY(-64px)}}
+@media(max-width:760px){.journey-logo-reveal{width:clamp(180px,38vh,300px)}.journey-numeral{display:none}}
+@media(prefers-reduced-motion:reduce){.journey-hero h1{color:#1a0f06;background:none}.journey-logo-ring circle{stroke-dashoffset:0}.journey-track-fill,.journey-track-spark,.journey-atmosphere,.journey-atmosphere span{transition:none}}
