@@ -7,6 +7,9 @@ import { z } from 'zod'
 import { getAuthBridge } from '../lib/auth-server'
 import { authClient } from '../lib/auth-client'
 import { api } from '../../convex/_generated/api'
+import { ArrowRight, BadgeCheck, LogOut } from 'lucide-react'
+import { JourneyFrame } from '../features/onboarding/JourneyFrame'
+import type { Lang } from '../features/onboarding/JourneyFrame'
 const privateHeaders=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 const verifiedSession=createServerFn({method:'GET'}).handler(async()=>{
  setResponseHeaders(new Headers(privateHeaders()))
@@ -36,6 +39,27 @@ function Access(){
   try{const result=await saveProfile({data:{...detailsSchema.parse(details),requestAccess}});setStatus(result.ok?'saved':'error');if(result.ok&&requestAccess)setRequested(true)}catch{setStatus('error')}
  }
  function submit(event:FormEvent){event.preventDefault();void save(false)}
- function input(key:'organization'|'position'|'phone'|'linkedin',label:string,type='text'){return <label className="field">{label}<input type={type} maxLength={key==='phone'?40:key==='linkedin'?300:160} value={details[key]} onChange={e=>setDetails(d=>({...d,[key]:e.target.value}))}/></label>}
- return <main className="welcome-shell"><section className="panel" style={{margin:'auto'}}><img className="brand" src="/adc-logo.png" alt="African Digit Consulting"/><h2>Bienvenue, {session.name}</h2><p>Votre adresse est vérifiée. L’accès aux documents nécessite une autorisation explicite d’ADC.</p><p>Your email is verified. Document access requires explicit ADC approval.</p><a className="secondary" href="/investor">Ouvrir la Data Room / Open investor room →</a><form onSubmit={submit}><p className="eyebrow">Profil facultatif / Optional profile</p>{input('organization','Organisation / Organization')}{input('position','Fonction / Position')}<label className="field">Profil / Investor type<select value={details.investorType} onChange={e=>{const value=detailsSchema.shape.investorType.safeParse(e.target.value);if(value.success)setDetails(d=>({...d,investorType:value.data}))}}><option value="">Non renseigné / Not specified</option><option value="angel">Business Angel</option><option value="vc">Venture Capital</option><option value="institution">Institutionnel / Institutional</option><option value="partner">Partenaire / Partner</option><option value="other">Autre / Other</option></select></label>{input('phone','Téléphone / Phone','tel')}{input('linkedin','LinkedIn','url')}<button className="primary" disabled={status==='saving'}>{status==='saving'?'Enregistrement…':'Enregistrer mon profil / Save profile'}</button>{status==='saved'&&<p role="status">Profil enregistré. / Profile saved.</p>}{session.intakeAvailable&&!requested&&<button type="button" className="primary" disabled={status==='saving'} onClick={()=>void save(true)}>Demander un accès à ADC / Request access</button>}{requested&&<p role="status">Demande transmise à ADC. Aucune autorisation automatique. / Request submitted. Access requires approval.</p>}{status==='error'&&<p role="alert">Enregistrement impossible. / Unable to save.</p>}</form><button className="secondary" onClick={async()=>{setSignOutError(false);try{const result=await authClient.signOut();if(result.error)throw new Error('Sign out failed');location.assign('/')}catch{setSignOutError(true)}}}>Déconnexion / Sign out</button>{signOutError&&<p role="alert">Déconnexion impossible. / Unable to sign out.</p>}</section></main>
+ const [lang,setLang]=useState<Lang>('fr')
+ const fr=lang==='fr'
+ function input(key:'organization'|'position'|'phone'|'linkedin',label:string,type='text'){return <label className="field"><span>{label} <small>· {fr?'Facultatif':'Optional'}</small></span><input type={type} maxLength={key==='phone'?40:key==='linkedin'?300:160} value={details[key]} onChange={e=>setDetails(d=>({...d,[key]:e.target.value}))}/></label>}
+ return <JourneyFrame lang={lang} setLang={setLang} tone="success">
+  <div className="frame-emblem is-success"><BadgeCheck size={30} aria-hidden="true"/></div>
+  <p className="journey-kicker">{fr?'ADRESSE VÉRIFIÉE':'EMAIL VERIFIED'}</p>
+  <h1>{fr?'Bienvenue, ':'Welcome, '}{session.name}.</h1>
+  <p className="frame-lead">{fr?'Votre adresse est vérifiée. L’accès aux documents nécessite une autorisation explicite d’ADC.':'Your email is verified. Document access requires explicit approval from ADC.'}</p>
+  <a className="primary journey-primary" href="/investor">{fr?'Ouvrir la Data Room':'Open the data room'}<ArrowRight size={19}/></a>
+  {session.intakeAvailable&&!requested&&<button type="button" className="secondary journey-link frame-cta-alt" disabled={status==='saving'} onClick={()=>void save(true)}>{fr?'Demander un accès à ADC':'Request access from ADC'}<ArrowRight size={15}/></button>}
+  {requested&&<p role="status" className="frame-status ok">{fr?'Demande transmise à ADC. L’accès sera ouvert après validation.':'Request sent to ADC. Access opens after approval.'}</p>}
+  <form className="frame-form" onSubmit={submit}>
+   <p className="journey-kicker">{fr?'VOTRE PROFIL · FACULTATIF':'YOUR PROFILE · OPTIONAL'}</p>
+   <div className="journey-fields">{input('organization',fr?'Organisation':'Organization')}{input('position',fr?'Fonction':'Position')}
+    <label className="field"><span>{fr?'Profil investisseur':'Investor type'} <small>· {fr?'Facultatif':'Optional'}</small></span><select value={details.investorType} onChange={e=>{const value=detailsSchema.shape.investorType.safeParse(e.target.value);if(value.success)setDetails(d=>({...d,investorType:value.data}))}}><option value="">{fr?'Non renseigné':'Not specified'}</option><option value="angel">Business Angel</option><option value="vc">{fr?'Fonds d’investissement':'Venture capital'}</option><option value="institution">{fr?'Institutionnel':'Institutional'}</option><option value="partner">{fr?'Partenaire stratégique':'Strategic partner'}</option><option value="other">{fr?'Autre':'Other'}</option></select></label>
+    {input('phone',fr?'Téléphone / WhatsApp':'Phone / WhatsApp','tel')}{input('linkedin','LinkedIn','url')}</div>
+   <button className="primary journey-primary" disabled={status==='saving'}>{status==='saving'?(fr?'Enregistrement…':'Saving…'):(fr?'Enregistrer mon profil':'Save my profile')}<ArrowRight size={19}/></button>
+   {status==='saved'&&<p role="status" className="frame-status ok">{fr?'Profil enregistré.':'Profile saved.'}</p>}
+   {status==='error'&&<p role="alert" className="frame-status error">{fr?'Enregistrement impossible. Réessayez.':'Unable to save. Please try again.'}</p>}
+  </form>
+  <button className="secondary journey-link frame-back" onClick={async()=>{setSignOutError(false);try{const result=await authClient.signOut();if(result.error)throw new Error('Sign out failed');location.assign('/')}catch{setSignOutError(true)}}}><LogOut size={15}/>{fr?'Déconnexion':'Sign out'}</button>
+  {signOutError&&<p role="alert" className="frame-status error">{fr?'Déconnexion impossible.':'Unable to sign out.'}</p>}
+ </JourneyFrame>
 }

@@ -19,6 +19,7 @@ import type * as http from "../http.js";
 import type * as intelligence from "../intelligence.js";
 import type * as investors from "../investors.js";
 import type * as lib_adminPolicy from "../lib/adminPolicy.js";
+import type * as lib_emailTemplate from "../lib/emailTemplate.js";
 import type * as lib_hash from "../lib/hash.js";
 import type * as lib_roomPolicy from "../lib/roomPolicy.js";
 import type * as portal from "../portal.js";
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   intelligence: typeof intelligence;
   investors: typeof investors;
   "lib/adminPolicy": typeof lib_adminPolicy;
+  "lib/emailTemplate": typeof lib_emailTemplate;
   "lib/hash": typeof lib_hash;
   "lib/roomPolicy": typeof lib_roomPolicy;
   portal: typeof portal;
