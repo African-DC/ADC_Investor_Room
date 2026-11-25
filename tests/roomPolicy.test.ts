@@ -26,7 +26,7 @@ it('projects only the exact published revision without private source or author'
  const section={_id:'s1' as Id<'sections'>,roomId:room._id,publishedVersionId:'v1' as Id<'sectionVersions'>}
  const version:Doc<'sectionVersions'>={_id:section.publishedVersionId,_creationTime:0,sectionId:section._id,roomId:room._id,version:1,titleFr:'Titre',titleEn:'Title',bodyFr:'Texte',bodyEn:'Text',source:'private-source',authorId:'operator',state:'published',createdAt:0}
  const projection=currentPublication(section,version)
- expect(projection).toEqual({id:section._id,titleFr:'Titre',titleEn:'Title',bodyFr:'Texte',bodyEn:'Text',publishedAt:0})
+ expect(projection).toEqual({id:section._id,titleFr:'Titre',titleEn:'Title',bodyFr:'Texte',bodyEn:'Text',blocksFr:null,blocksEn:null,publishedAt:0})
  expect(currentPublication(section,{...version,state:'draft'})).toBeNull()
  expect(currentPublication(section,{...version,roomId:other._id})).toBeNull()
  expect(currentPublication(section,{...version,_id:'v2' as Id<'sectionVersions'>})).toBeNull()

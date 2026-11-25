@@ -1,0 +1,61 @@
+import { useRef,useState } from 'react'
+import type { ReactNode } from 'react'
+import { GripVertical,ArrowUp,ArrowDown,Copy,Trash2,Plus,Heading,Pilcrow,List,MessageSquareQuote,Minus,Table2,BarChart3,LayoutGrid,ListChecks,FileText,Link2,Info,Hash,X } from 'lucide-react'
+import { newId } from './schema'
+import type { Block,BlockType } from './schema'
+type Doc={id:string;titleFr:string}
+const palette:{type:BlockType;label:string;hint:string;icon:typeof Heading}[]=[
+ {type:'heading',label:'Titre',hint:'Intertitre de section',icon:Heading},{type:'paragraph',label:'Texte',hint:'Paragraphe',icon:Pilcrow},{type:'list',label:'Liste',hint:'À puces ou numérotée',icon:List},
+ {type:'callout',label:'Encadré',hint:'Information mise en avant',icon:Info},{type:'stats',label:'Chiffres clés',hint:'Indicateurs en grand',icon:Hash},{type:'cards',label:'Cartes',hint:'Grille de points forts',icon:LayoutGrid},
+ {type:'table',label:'Tableau',hint:'Lignes et colonnes',icon:Table2},{type:'allocation',label:'Répartition',hint:'Barres de pourcentage',icon:BarChart3},{type:'status',label:'Statuts',hint:'Fait / en cours / à venir',icon:ListChecks},
+ {type:'quote',label:'Citation',hint:'Phrase forte',icon:MessageSquareQuote},{type:'document',label:'Document',hint:'PDF de la bibliothèque',icon:FileText},{type:'link',label:'Lien',hint:'Lien externe sécurisé',icon:Link2},{type:'divider',label:'Séparateur',hint:'Ligne de séparation',icon:Minus},
+]
+export function emptyBlock(type:BlockType):Block{const id=newId();switch(type){
+ case 'heading':return {id,type,level:2,text:''};case 'paragraph':return {id,type,text:''};case 'list':return {id,type,ordered:false,items:['']}
+ case 'callout':return {id,type,tone:'brand',title:'',text:''};case 'stats':return {id,type,items:[{value:'',label:''},{value:'',label:''}]}
+ case 'table':return {id,type,header:true,rows:[['',''],['','']]};case 'quote':return {id,type,text:'',author:''};case 'divider':return {id,type}
+ case 'allocation':return {id,type,title:'',total:'',note:'',items:[{label:'',amount:'',percent:0}]};case 'status':return {id,type,items:[{label:'',state:'progress',note:''}]}
+ case 'cards':return {id,type,items:[{title:'',text:''},{title:'',text:''}]};case 'document':return {id,type,documentId:'',caption:''};case 'link':return {id,type,url:'https://',label:''}
+}}
+export function BlockEditor({value,onChange,documents}:{value:Block[];onChange:(b:Block[])=>void;documents:Doc[]}){
+ const [menuAt,setMenuAt]=useState<number|null>(null),[dragging,setDragging]=useState<number|null>(null),[over,setOver]=useState<number|null>(null)
+ const set=(i:number,b:Block)=>onChange(value.map((x,k)=>k===i?b:x))
+ const insert=(i:number,type:BlockType)=>{const next=[...value];next.splice(i,0,emptyBlock(type));onChange(next);setMenuAt(null)}
+ const move=(from:number,to:number)=>{if(to<0||to>=value.length||from===to)return;const next=[...value];const [b]=next.splice(from,1);next.splice(to,0,b);onChange(next)}
+ const Inserter=({at}:{at:number})=><div className={'be-insert'+(menuAt===at?' open':'')}><button type="button" className="be-plus" aria-label="Ajouter un bloc" aria-expanded={menuAt===at} onClick={()=>setMenuAt(menuAt===at?null:at)}><Plus size={15}/></button>{menuAt===at&&<div className="be-menu" role="menu">{palette.map(p=><button type="button" role="menuitem" key={p.type} onClick={()=>insert(at,p.type)}><p.icon size={18}/><span><b>{p.label}</b><small>{p.hint}</small></span></button>)}<button type="button" className="be-menu-close" aria-label="Fermer" onClick={()=>setMenuAt(null)}><X size={14}/></button></div>}</div>
+ return <div className="be">
+  {value.length===0&&<p className="be-empty">Page vide. Ajoutez votre premier bloc.</p>}
+  <Inserter at={0}/>
+  {value.map((b,i)=>{const meta=palette.find(p=>p.type===b.type)!;return <div key={b.id}>
+   <section className={'be-block'+(dragging===i?' is-dragging':'')+(over===i&&dragging!==null&&dragging!==i?' is-over':'')} onDragOver={e=>{if(dragging===null)return;e.preventDefault();setOver(i)}} onDrop={e=>{e.preventDefault();if(dragging!==null)move(dragging,i);setDragging(null);setOver(null)}}>
+    <header className="be-bar"><span className="be-handle" draggable onDragStart={e=>{setDragging(i);e.dataTransfer.effectAllowed='move'}} onDragEnd={()=>{setDragging(null);setOver(null)}} title="Glisser pour déplacer"><GripVertical size={16}/></span><span className="be-type"><meta.icon size={14}/>{meta.label}</span>
+     <span className="be-tools"><button type="button" aria-label="Monter" disabled={i===0} onClick={()=>move(i,i-1)}><ArrowUp size={15}/></button><button type="button" aria-label="Descendre" disabled={i===value.length-1} onClick={()=>move(i,i+1)}><ArrowDown size={15}/></button><button type="button" aria-label="Dupliquer" onClick={()=>{const next=[...value];next.splice(i+1,0,{...structuredClone(b),id:newId()});onChange(next)}}><Copy size={15}/></button><button type="button" aria-label="Supprimer" className="danger" onClick={()=>onChange(value.filter((_,k)=>k!==i))}><Trash2 size={15}/></button></span></header>
+    <div className="be-body">{fields(b,v=>set(i,v),documents)}</div>
+   </section><Inserter at={i+1}/></div>})}
+ </div>
+}
+function Area({value,onChange,placeholder,rows=3,big}:{value:string;onChange:(v:string)=>void;placeholder:string;rows?:number;big?:boolean}){
+ const ref=useRef<HTMLTextAreaElement>(null)
+ return <textarea ref={ref} className={'be-area'+(big?' big':'')} rows={rows} value={value} placeholder={placeholder} onChange={e=>{onChange(e.target.value);const el=e.currentTarget;el.style.height='auto';el.style.height=el.scrollHeight+'px'}}/>
+}
+function Line({value,onChange,placeholder,className=''}:{value:string;onChange:(v:string)=>void;placeholder:string;className?:string}){return <input className={'be-line '+className} value={value} placeholder={placeholder} onChange={e=>onChange(e.target.value)}/>}
+function Rows<T>({items,onChange,make,render,add}:{items:T[];onChange:(x:T[])=>void;make:()=>T;render:(x:T,set:(x:T)=>void)=>ReactNode;add:string}){
+ return <div className="be-rows">{items.map((x,i)=><div className="be-row" key={i}>{render(x,v=>onChange(items.map((y,k)=>k===i?v:y)))}<button type="button" className="be-x" aria-label="Retirer" onClick={()=>onChange(items.filter((_,k)=>k!==i))}><X size={14}/></button></div>)}<button type="button" className="be-add" onClick={()=>onChange([...items,make()])}><Plus size={14}/>{add}</button></div>
+}
+function fields(b:Block,set:(b:Block)=>void,documents:Doc[]):ReactNode{switch(b.type){
+ case 'heading':return <div className="be-inline"><select value={b.level} onChange={e=>set({...b,level:Number(e.target.value) as 2|3})}><option value={2}>Grand titre</option><option value={3}>Sous-titre</option></select><Line className={'h'+b.level} value={b.text} onChange={text=>set({...b,text})} placeholder="Titre…"/></div>
+ case 'paragraph':return <Area value={b.text} onChange={text=>set({...b,text})} placeholder="Écrivez votre texte…" rows={4}/>
+ case 'list':return <><label className="be-toggle"><input type="checkbox" checked={b.ordered} onChange={e=>set({...b,ordered:e.target.checked})}/>Liste numérotée</label><Area value={b.items.join('\n')} onChange={v=>set({...b,items:v.split('\n')})} placeholder="Un élément par ligne" rows={4}/></>
+ case 'callout':return <><div className="be-inline"><select value={b.tone} onChange={e=>set({...b,tone:e.target.value as typeof b.tone})}><option value="brand">ADC (orange)</option><option value="info">Information</option><option value="success">Réussite</option><option value="warning">Attention</option></select><Line value={b.title} onChange={title=>set({...b,title})} placeholder="Titre de l’encadré"/></div><Area value={b.text} onChange={text=>set({...b,text})} placeholder="Contenu" rows={2}/></>
+ case 'stats':return <Rows items={b.items} onChange={items=>set({...b,items})} make={()=>({value:'',label:''})} add="Ajouter un chiffre" render={(x,s)=><><Line className="w-sm" value={x.value} onChange={value=>s({...x,value})} placeholder="15"/><Line value={x.label} onChange={label=>s({...x,label})} placeholder="Établissements référencés"/></>}/>
+ case 'cards':return <Rows items={b.items} onChange={items=>set({...b,items})} make={()=>({title:'',text:''})} add="Ajouter une carte" render={(x,s)=><div className="be-stack"><Line value={x.title} onChange={title=>s({...x,title})} placeholder="Titre"/><Area value={x.text} onChange={text=>s({...x,text})} placeholder="Description" rows={2}/></div>}/>
+ case 'table':{const cols=Math.max(1,...b.rows.map(r=>r.length));return <><div className="be-inline"><label className="be-toggle"><input type="checkbox" checked={b.header} onChange={e=>set({...b,header:e.target.checked})}/>Première ligne = en-tête</label><button type="button" className="be-add" onClick={()=>set({...b,rows:b.rows.map(r=>[...r,''])})} disabled={cols>=8}><Plus size={14}/>Colonne</button><button type="button" className="be-add" onClick={()=>set({...b,rows:b.rows.map(r=>r.slice(0,-1))})} disabled={cols<=1}><Minus size={14}/>Colonne</button></div>
+  <div className="be-grid" style={{gridTemplateColumns:`repeat(${cols},minmax(110px,1fr)) 28px`}}>{b.rows.map((r,i)=><div className="be-grid-row" key={i} style={{display:'contents'}}>{Array.from({length:cols},(_,j)=><input key={j} className={'be-cell'+(b.header&&i===0?' head':'')} value={r[j]??''} onChange={e=>set({...b,rows:b.rows.map((row,k)=>k===i?Array.from({length:cols},(_,c)=>c===j?e.target.value:row[c]??''):row)})}/>)}<button type="button" className="be-x" aria-label="Retirer la ligne" onClick={()=>set({...b,rows:b.rows.filter((_,k)=>k!==i)})}><X size={14}/></button></div>)}</div>
+  <button type="button" className="be-add" onClick={()=>set({...b,rows:[...b.rows,Array(cols).fill('')]})}><Plus size={14}/>Ligne</button></>}
+ case 'quote':return <><Area value={b.text} onChange={text=>set({...b,text})} placeholder="Citation" rows={2} big/><Line value={b.author} onChange={author=>set({...b,author})} placeholder="Auteur (facultatif)"/></>
+ case 'divider':return <hr className="bk-hr"/>
+ case 'allocation':return <><div className="be-inline"><Line value={b.title} onChange={title=>set({...b,title})} placeholder="Titre (ex. Utilisation des fonds)"/><Line className="w-md" value={b.total} onChange={total=>set({...b,total})} placeholder="100 000 000 FCFA"/></div><Rows items={b.items} onChange={items=>set({...b,items})} make={()=>({label:'',amount:'',percent:0})} add="Ajouter un poste" render={(x,s)=><><Line value={x.label} onChange={label=>s({...x,label})} placeholder="Marketing et déploiement"/><Line className="w-md" value={x.amount} onChange={amount=>s({...x,amount})} placeholder="35 M FCFA"/><input className="be-line w-xs" type="number" min={0} max={100} value={x.percent} onChange={e=>s({...x,percent:Math.max(0,Math.min(100,Number(e.target.value)||0))})} aria-label="Pourcentage"/>%</>}/><p className={'be-sum'+(b.items.reduce((a,x)=>a+x.percent,0)===100?' ok':'')}>Total : {b.items.reduce((a,x)=>a+x.percent,0)} %</p><Line value={b.note} onChange={note=>set({...b,note})} placeholder="Note (ex. allocation prévisionnelle à valider)"/></>
+ case 'status':return <Rows items={b.items} onChange={items=>set({...b,items})} make={()=>({label:'',state:'progress' as const,note:''})} add="Ajouter un élément" render={(x,s)=><><Line value={x.label} onChange={label=>s({...x,label})} placeholder="Élément"/><select value={x.state} onChange={e=>s({...x,state:e.target.value as typeof x.state})}><option value="done">Fait / disponible</option><option value="progress">En cours</option><option value="todo">À venir</option></select><Line className="w-md" value={x.note} onChange={note=>s({...x,note})} placeholder="Libellé (facultatif)"/></>}/>
+ case 'document':return <div className="be-inline"><select value={b.documentId} onChange={e=>set({...b,documentId:e.target.value})}><option value="">Choisir un document…</option>{documents.map(d=><option key={d.id} value={d.id}>{d.titleFr}</option>)}</select><Line value={b.caption} onChange={caption=>set({...b,caption})} placeholder="Légende (facultatif)"/></div>
+ case 'link':return <div className="be-inline"><Line value={b.label} onChange={label=>set({...b,label})} placeholder="Libellé du lien"/><Line value={b.url} onChange={url=>set({...b,url})} placeholder="https://…"/></div>
+}}

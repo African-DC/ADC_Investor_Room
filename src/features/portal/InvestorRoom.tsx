@@ -1,6 +1,9 @@
 import { useEffect,useRef,useState } from 'react'
 import { Building2,LockKeyhole,ArrowRight,ArrowLeft,LogOut,Globe2,FileText,RefreshCw,LayoutDashboard,Menu,ChevronRight,Hourglass,ShieldCheck,Inbox,Eye,Download,Boxes,TrendingUp,Landmark,Rocket,Users,Cpu,Scale,FolderLock } from 'lucide-react'
 import { JourneyFrame } from '../onboarding/JourneyFrame'
+import { BlockView } from '../blocks/BlockView'
+import { parseBlocks } from '../blocks/schema'
+import type { Block } from '../blocks/schema'
 import { SearchField } from '../../components/ui/SearchField'
 import { IntelligencePanel } from '../intelligence/IntelligencePanel'
 import type { Answer } from '../intelligence/retrieval'
@@ -12,7 +15,7 @@ import type { MetricView } from '../finance/FinanceView'
 import { authClient } from '../../lib/auth-client'
 import { brandFor } from '../brand/products'
 import type { CSSProperties } from 'react'
-type Section={id:string;versionId:string;slug?:string;titleFr:string;titleEn:string;bodyFr:string;bodyEn:string;category:string;order:number;publishedAt:number}
+type Section={id:string;versionId:string;slug?:string;blocksFr?:string|null;blocksEn?:string|null;titleFr:string;titleEn:string;bodyFr:string;bodyEn:string;category:string;order:number;publishedAt:number}
 type DocumentItem={id:string;titleFr:string;titleEn:string;category:string;version:number;sizeBytes:number;download:boolean}
 export type Overview={name:string;rooms:{id:string;name:string}[];room:{id:string;name:string}|null;nda:{version:string;textFr:string;textEn:string}|null;sections:Section[];documents:DocumentItem[];metrics:MetricView[];qaEnabled:boolean;questions:Question[];analytics:{allowed:boolean}|null;aiEnabled:boolean;aiExternal:boolean}
 const dictionary={fr:{private:'ESPACE INVESTISSEUR',welcome:'Bienvenue',overview:'Vue d’ensemble',search:'Rechercher dans les sections accessibles',empty:'Aucun contenu publié ne vous est encore accessible.',noRoom:'ADC n’a pas encore attribué de salle à votre compte.',nda:'Accord de confidentialité',agree:'J’ai lu et j’accepte cette version de l’accord.',continue:'Accepter et continuer',refresh:'Actualiser',expired:'Votre accès a changé ou la connexion est indisponible. Reconnectez-vous.',logout:'Déconnexion',profile:'Mon profil',published:'Publié le',error:'Impossible de terminer cette action.',none:'Aucun résultat.',room:'Salle de données',choose:'Choisir une salle',language:'EN'},en:{private:'INVESTOR ROOM',welcome:'Welcome',overview:'Overview',search:'Search accessible sections',empty:'No published content is currently available to you.',noRoom:'ADC has not assigned a room to your account yet.',nda:'Confidentiality agreement',agree:'I have read and accept this version of the agreement.',continue:'Accept and continue',refresh:'Refresh',expired:'Your access has changed or the connection is unavailable. Please sign in again.',logout:'Sign out',profile:'My profile',published:'Published on',error:'Unable to complete this action.',none:'No results.',room:'Data room',choose:'Select a room',language:'FR'}} as const
@@ -74,7 +77,8 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
    :selected?<article key={selected.id} className="dr-article" {...brandStyle(selected.slug)}>
      <button className="dr-back" onClick={()=>go(null)}><ArrowLeft size={15}/>{t.overview}</button>
      <header className="dr-article-head">{brandFor(selected.slug)?<img className="dr-article-logo" src={brandFor(selected.slug)!.logo} alt="" width={84} height={84}/>:<span className="dr-article-icon">{(()=>{const I=categoryIcon(selected.category);return <I size={30}/>})()}</span>}<div><p className="journey-kicker">{categoryLabel(selected.category,lang)}</p><h1>{title(selected)}</h1><p className="dr-muted">{t.published} {date(selected.publishedAt)}</p></div></header>
-     <div className="dr-prose">{body(selected)}</div>
+     {(()=>{const blocks=safeBlocks(lang==='fr'?selected.blocksFr:selected.blocksEn??selected.blocksFr);return blocks?<BlockView blocks={blocks} lang={lang} documents={data.documents} openDocument={id=>setActiveDocument(id)}/>:<div className="dr-prose">{body(selected)}</div>})()}
+     {selectedDocument&&data.room&&<PdfReader key={selectedDocument.id+'-'+selectedDocument.version} roomId={data.room.id} documentId={selectedDocument.id} title={fr?selectedDocument.titleFr:selectedDocument.titleEn} viewer={data.name} lang={lang} onClose={()=>setActiveDocument(null)}/>}
      {data.metrics.some(m=>m.sectionId===selected.id)&&<FinanceView metrics={data.metrics.filter(m=>m.sectionId===selected.id)} lang={lang}/>}
      <nav className="dr-pager">{index>0?<button onClick={()=>go(sections[index-1].id)}><ArrowLeft size={16}/><span><small>{fr?'Précédent':'Previous'}</small>{title(sections[index-1])}</span></button>:<span/>}{index<sections.length-1&&<button className="next" onClick={()=>go(sections[index+1].id)}><span><small>{fr?'Suivant':'Next'}</small>{title(sections[index+1])}</span><ArrowRight size={16}/></button>}</nav>
     </article>
@@ -104,3 +108,5 @@ function categoryLabel(c:string,lang:Locale){const l=labels[c];return l?(lang===
 function initials(name:string){return name.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]!.toUpperCase()).join('')||'·'}
 function formatSize(n:number,lang:Locale){return n>=1048576?(n/1048576).toLocaleString(lang,{maximumFractionDigits:1})+(lang==='fr'?' Mo':' MB'):Math.ceil(n/1024)+(lang==='fr'?' Ko':' KB')}
 function brandStyle(slug?:string){const b=brandFor(slug);return b?{style:{'--product':b.accent,'--product-tint':b.tint} as CSSProperties,'data-product':b.name}:{style:undefined,'data-product':undefined}}
+
+function safeBlocks(json?:string|null):Block[]|null{try{return parseBlocks(json)}catch{return null}}

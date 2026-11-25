@@ -8,5 +8,5 @@ export function permits(userId:string,room:Pick<Doc<'rooms'>,'_id'|'status'|'nda
 }
 export function currentPublication(section:Pick<Doc<'sections'>,'_id'|'roomId'|'publishedVersionId'>,version:Doc<'sectionVersions'>|null){
  if(!version||section.publishedVersionId!==version._id||version.sectionId!==section._id||version.roomId!==section.roomId||version.state!=='published')return null
- return {id:section._id,titleFr:version.titleFr,titleEn:version.titleEn,bodyFr:version.bodyFr,bodyEn:version.bodyEn,publishedAt:version.publishedAt??version.createdAt}
+ return {id:section._id,titleFr:version.titleFr,titleEn:version.titleEn,bodyFr:version.bodyFr,bodyEn:version.bodyEn,blocksFr:version.blocksFr??null,blocksEn:version.blocksEn??null,publishedAt:version.publishedAt??version.createdAt}
 }

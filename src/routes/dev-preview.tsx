@@ -2,12 +2,27 @@ import { createFileRoute,notFound } from '@tanstack/react-router'
 import { useState } from 'react'
 import { InvestorRoom } from '../features/portal/InvestorRoom'
 import { MfaGate } from '../features/admin/MfaGate'
+import { PageEditor } from '../features/blocks/PageEditor'
+import type { Block } from '../features/blocks/schema'
 import type { Overview } from '../features/portal/InvestorRoom'
+const demoBlocks:Block[]=[
+ {id:'demo00001',type:'callout',tone:'brand',title:'Encadré de démonstration',text:'Texte fictif mis en avant.'},
+ {id:'demo00002',type:'stats',items:[{value:'00',label:'Indicateur fictif A'},{value:'0 000+',label:'Indicateur fictif B'},{value:'0 M',label:'Indicateur fictif C'}]},
+ {id:'demo00003',type:'heading',level:2,text:'Intertitre de démonstration'},
+ {id:'demo00004',type:'paragraph',text:'Paragraphe fictif pour valider la typographie de lecture dans la salle de données.'},
+ {id:'demo00005',type:'list',ordered:false,items:['Premier point fictif','Deuxième point fictif']},
+ {id:'demo00006',type:'allocation',title:'Répartition fictive',total:'000 FCFA',note:'Données de démonstration.',items:[{label:'Poste A',amount:'00',percent:40},{label:'Poste B',amount:'00',percent:35},{label:'Poste C',amount:'00',percent:25}]},
+ {id:'demo00007',type:'cards',items:[{title:'Carte A',text:'Description fictive.'},{title:'Carte B',text:'Description fictive.'},{title:'Carte C',text:'Description fictive.'}]},
+ {id:'demo00008',type:'table',header:true,rows:[['Colonne','Valeur'],['Ligne 1','Fictif'],['Ligne 2','Fictif']]},
+ {id:'demo00009',type:'status',items:[{label:'Élément terminé',state:'done',note:''},{label:'Élément en cours',state:'progress',note:''},{label:'Élément à venir',state:'todo',note:''}]},
+ {id:'demo00010',type:'quote',text:'Citation fictive de démonstration.',author:'Démo'},
+ {id:'demo00011',type:'document',documentId:'d1',caption:'Document fictif intégré'},
+]
 // DEV-ONLY visual harness. Synthetic placeholders, no real ADC content. 404 in production builds.
 const lorem='Contenu de démonstration (fictif). Cette section sera rédigée et validée par ADC avant publication.\n\nLe texte définitif proviendra du CMS après relecture par un second administrateur.'
 const sec=(id:string,slug:string,category:string,titleFr:string,order:number)=>({id,versionId:'v'+id,slug,category,order,titleFr,titleEn:titleFr,bodyFr:lorem,bodyEn:'Demo placeholder (synthetic). ADC will write and approve this section before publication.',publishedAt:Date.UTC(2026,10,20)})
 const base:Overview={name:'Investisseur Démo',rooms:[{id:'r1',name:'Salle de démonstration'},{id:'r2',name:'Autre salle (démo)'}],room:{id:'r1',name:'Salle de démonstration'},nda:null,
- sections:[sec('s1','adc-overview','company','African Digit Consulting',10),sec('s2','klassci','products','KLASSCI',20),sec('s3','wouri','products','WOURI',30),sec('s4','investment','investment','Investissement et utilisation des fonds',40),sec('s5','traction','traction','Traction et adoption',60),sec('s6','team','team','Équipe et recrutement',70)],
+ sections:[sec('s1','adc-overview','company','African Digit Consulting',10),{...sec('s2','klassci','products','KLASSCI',20),blocksFr:JSON.stringify(demoBlocks)},sec('s3','wouri','products','WOURI',30),sec('s4','investment','investment','Investissement et utilisation des fonds',40),sec('s5','traction','traction','Traction et adoption',60),sec('s6','team','team','Équipe et recrutement',70)],
  documents:[{id:'d1',titleFr:'Document de démonstration',titleEn:'Demo document',category:'company',version:1,sizeBytes:248000,download:false},{id:'d2',titleFr:'Autre document fictif',titleEn:'Another demo file',category:'legal',version:2,sizeBytes:1200000,download:true}],
  metrics:[],qaEnabled:false,questions:[],analytics:{allowed:false},aiEnabled:false,aiExternal:false}
 export const Route=createFileRoute('/dev-preview')({beforeLoad:()=>{if(!import.meta.env.DEV)throw notFound()},validateSearch:(s:Record<string,unknown>)=>({state:typeof s.state==='string'?s.state:'room'}),component:Preview})
@@ -15,6 +30,7 @@ function Preview(){
  const {state}=Route.useSearch()
  const [data]=useState<Overview>(()=>state==='nda'?{...base,nda:{version:'NDA-2026-01',textFr:'Texte d’accord de confidentialité fictif pour la démonstration.\n\n'.repeat(8),textEn:'Demo NDA text.'}}:state==='noroom'?{...base,room:null,rooms:[],sections:[],documents:[]}:state==='empty'?{...base,sections:[],documents:[]}:base)
  const ok=async()=>({ok:true})
+ if(state==='editor')return <main style={{padding:24,background:'#fbf7f2',minHeight:'100vh'}}><PageEditor roomId="r1" sections={[{id:'s2',slug:'klassci',category:'products',order:20,published:false,latest:{id:'v2',number:2,state:'review',titleFr:'KLASSCI',titleEn:'KLASSCI',bodyFr:'',bodyEn:'',blocksFr:JSON.stringify(demoBlocks),source:'Démo',own:false}},{id:'s1',slug:'adc-overview',category:'company',order:10,published:true,latest:{id:'v1',number:1,state:'published',titleFr:'African Digit Consulting',titleEn:'African Digit Consulting',bodyFr:'TEXTE\nDémo',bodyEn:'',source:'Démo',own:true}}]} documents={[{id:'d1',titleFr:'Document fictif',titleEn:'Demo document'}]} canEdit canReview busy={false} run={async()=>{}}/></main>
  if(state.startsWith('mfa'))return <MfaGate status={{name:'Admin Démo',email:'admin@example.com',enrolled:state==='mfa-verify',verified:false,lockedUntil:null,recoveryLeft:10}} begin={async()=>({uri:'otpauth://totp/ADC%20Investor%20Room:admin@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=ADC%20Investor%20Room',secret:'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'})} confirm={async()=>({ok:true,recovery:['ABCD-EFGH','JKLM-NPQR','STUV-WXYZ','2345-6789','A2B3-C4D5','E6F7-G2H3','J4K5-L6M7','N2P3-Q4R5','S6T7-U2V3','W4X5-Y6Z7']})} verify={async()=>({ok:false})}/>
  return <InvestorRoom initial={data} refresh={async()=>data} acceptNda={ok} questionRead={async()=>null} questionSend={ok} engagement={ok} intelligence={async()=>({status:'empty'} as never)}/>
 }

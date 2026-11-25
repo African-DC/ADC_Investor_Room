@@ -1,6 +1,7 @@
 // Trusted Convex operator functions ONLY. Not callable by browsers. No production activation.
 import { internalMutation } from './_generated/server'
 import { v } from 'convex/values'
+import { parseBlocks,blocksToText } from '../src/features/blocks/schema'
 function staging(){if(process.env.ADC_STAGING_CMS!=='true')throw new Error('Staging CMS disabled')}
 function text(value:string,max:number){const s=value.trim();if(!s||s.length>max)throw new Error('Invalid content');return s}
 const categories=['company','products','investment','finance','traction','team','technology','legal','compliance','documents','updates']
@@ -38,14 +39,15 @@ export const revoke=internalMutation({args:{grantId:v.id('accessGrants'),operato
  if(grant.revokedAt!==undefined)return
  await ctx.db.patch(grant._id,{revokedAt:Date.now()});await ctx.db.insert('auditLogs',{actorId:actor,event:'staging.grant.revoked',resourceId:grant._id,at:Date.now()})
 }})
-export const draft=internalMutation({args:{roomId:v.id('rooms'),slug:v.string(),category:v.string(),order:v.number(),titleFr:v.string(),titleEn:v.string(),bodyFr:v.string(),bodyEn:v.string(),source:v.string(),operatorId:v.string()},handler:async(ctx,a)=>{
+export const draft=internalMutation({args:{roomId:v.id('rooms'),slug:v.string(),category:v.string(),order:v.number(),titleFr:v.string(),titleEn:v.string(),bodyFr:v.string(),bodyEn:v.string(),blocksFr:v.optional(v.string()),blocksEn:v.optional(v.string()),source:v.string(),operatorId:v.string()},handler:async(ctx,a)=>{
  staging();const actor=text(a.operatorId,200),slug=text(a.slug,80)
+ const bf=parseBlocks(a.blocksFr),be=parseBlocks(a.blocksEn)
  if(!/^[a-z0-9-]+$/.test(slug)||!categories.includes(a.category)||!Number.isSafeInteger(a.order)||!await ctx.db.get(a.roomId))throw new Error('Invalid section')
  let section=await ctx.db.query('sections').withIndex('by_room_slug',q=>q.eq('roomId',a.roomId).eq('slug',slug)).unique()
  if(!section){const id=await ctx.db.insert('sections',{roomId:a.roomId,slug,category:a.category,order:a.order});section=await ctx.db.get(id)}
  if(!section||section.category!==a.category||section.order!==a.order)throw new Error('Section metadata cannot change through draft')
  const latest=section.latestVersionId?await ctx.db.get(section.latestVersionId):null
- const id=await ctx.db.insert('sectionVersions',{sectionId:section._id,roomId:a.roomId,version:(latest?.version??0)+1,titleFr:text(a.titleFr,180),titleEn:text(a.titleEn,180),bodyFr:text(a.bodyFr,40000),bodyEn:text(a.bodyEn,40000),source:text(a.source,2000),authorId:actor,state:'draft',createdAt:Date.now()})
+ const id=await ctx.db.insert('sectionVersions',{sectionId:section._id,roomId:a.roomId,version:(latest?.version??0)+1,titleFr:text(a.titleFr,180),titleEn:text(a.titleEn,180),bodyFr:text(bf?blocksToText(bf)||a.bodyFr:a.bodyFr,40000),bodyEn:text(be?blocksToText(be)||a.bodyEn:a.bodyEn,40000),blocksFr:bf?JSON.stringify(bf):undefined,blocksEn:be?JSON.stringify(be):undefined,source:text(a.source,2000),authorId:actor,state:'draft',createdAt:Date.now()})
  await ctx.db.patch(section._id,{latestVersionId:id})
  await ctx.db.insert('auditLogs',{actorId:actor,event:'staging.section.drafted',resourceId:id,at:Date.now()});return id
 }})

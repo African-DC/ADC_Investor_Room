@@ -68,7 +68,7 @@ export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>
   for(const section of rows){
    const version=section.latestVersionId?await ctx.db.get(section.latestVersionId):null
    const canEdit=capabilities.includes('content:edit')||capabilities.includes('content:review')
-   sections.push({id:section._id,slug:section.slug,category:section.category,order:section.order,published:!!section.publishedVersionId,latest:canEdit&&version&&version.roomId===a.roomId&&version.sectionId===section._id?{id:version._id,number:version.version,state:version.state,titleFr:version.titleFr,titleEn:version.titleEn,bodyFr:version.bodyFr,bodyEn:version.bodyEn,source:version.source,own:version.authorId===user._id}:null})
+   sections.push({id:section._id,slug:section.slug,category:section.category,order:section.order,published:!!section.publishedVersionId,latest:canEdit&&version&&version.roomId===a.roomId&&version.sectionId===section._id?{id:version._id,number:version.version,state:version.state,titleFr:version.titleFr,titleEn:version.titleEn,bodyFr:version.bodyFr,bodyEn:version.bodyEn,blocksFr:version.blocksFr??null,blocksEn:version.blocksEn??null,source:version.source,own:version.authorId===user._id}:null})
   }
  }
  const documents=[]
@@ -96,7 +96,7 @@ export const revoke=mutation({args:{roomId:v.id('rooms'),grantId:v.id('accessGra
  if(!grant||grant.roomId!==a.roomId)throw new Error('Unavailable')
  await ctx.runMutation(internal.stagingCms.revoke,{grantId:a.grantId,operatorId:user._id});return {ok:true}
 }})
-export const draft=mutation({args:{roomId:v.id('rooms'),slug:v.string(),category:v.string(),order:v.number(),titleFr:v.string(),titleEn:v.string(),bodyFr:v.string(),bodyEn:v.string(),source:v.string()},handler:async(ctx,a):Promise<Id<'sectionVersions'>>=>{
+export const draft=mutation({args:{roomId:v.id('rooms'),slug:v.string(),category:v.string(),order:v.number(),titleFr:v.string(),titleEn:v.string(),bodyFr:v.string(),bodyEn:v.string(),blocksFr:v.optional(v.string()),blocksEn:v.optional(v.string()),source:v.string()},handler:async(ctx,a):Promise<Id<'sectionVersions'>>=>{
  const {user}=await admin(ctx,a.roomId,'content:edit')
  return await ctx.runMutation(internal.stagingCms.draft,{...a,operatorId:user._id})
 }})
