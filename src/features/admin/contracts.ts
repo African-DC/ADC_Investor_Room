@@ -1,0 +1,21 @@
+import { z } from 'zod'
+import { kinds } from '../finance/registry'
+import { stages } from '../crm/model'
+const id=z.string().min(1).max(128)
+const base=z.object({roomId:id})
+export const adminCommand=z.discriminatedUnion('kind',[
+ base.extend({kind:z.literal('grant'),profileId:id,capability:z.enum(['room:read','section:read']),sectionId:id.optional(),effect:z.enum(['allow','deny']),expiresAt:z.number().finite().optional()}),
+ base.extend({kind:z.literal('grantDocument'),profileId:id,documentId:id,capability:z.enum(['document:read','document:download']),effect:z.enum(['allow','deny']),expiresAt:z.number().finite().optional()}),
+ base.extend({kind:z.literal('financeDraft'),sectionId:id,metricKind:z.enum(kinds),scope:z.string().trim().min(1).max(120),periodStart:z.string().max(10),periodEnd:z.string().max(10),definitionFr:z.string().trim().min(1).max(2000),definitionEn:z.string().trim().min(1).max(2000),value:z.number().int().safe(),unit:z.enum(['XOF','count']),evidenceVersionIds:z.array(id).min(1).max(10)}),
+ base.extend({kind:z.literal('financeTransition'),metricId:id,action:z.enum(['submit','publish','archive'])}),
+ base.extend({kind:z.literal('documentTransition'),documentId:id,action:z.enum(['publish','archive'])}),
+ base.extend({kind:z.literal('crmUpdate'),profileId:id,stage:z.enum(stages),nextAction:z.string().max(500),dueDate:z.string().max(10).optional(),assignToMe:z.boolean(),expectedRevision:z.number().int().nonnegative()}),
+ base.extend({kind:z.literal('crmNote'),profileId:id,text:z.string().trim().min(1).max(4000)}),
+ base.extend({kind:z.literal('qaReply'),questionId:id,body:z.string().trim().min(1).max(4000)}),
+ base.extend({kind:z.literal('qaClose'),questionId:id}),
+ base.extend({kind:z.literal('revoke'),grantId:id}),
+ base.extend({kind:z.literal('draft'),slug:z.string().regex(/^[a-z0-9-]+$/).max(80),category:z.enum(['company','products','investment','finance','traction','team','technology','legal','compliance','documents','updates']),order:z.number().int().min(0).max(10000),titleFr:z.string().trim().min(1).max(180),titleEn:z.string().trim().min(1).max(180),bodyFr:z.string().trim().min(1).max(40000),bodyEn:z.string().trim().min(1).max(40000),source:z.string().trim().min(1).max(2000)}),
+ base.extend({kind:z.literal('transition'),versionId:id,action:z.enum(['submit','publish'])}),
+ base.extend({kind:z.literal('archive'),sectionId:id}),
+])
+export type AdminCommand=z.infer<typeof adminCommand>

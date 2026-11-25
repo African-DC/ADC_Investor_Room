@@ -1,0 +1,4 @@
+# Backlog
+Source canonique : https://github.com/African-DC/ADC_Investor_Room/issues
+E01 #1 fondations (#16–18); E02 #2 design (#19–21); E03 #3 onboarding (#22–24); E04 #4 auth (#25–27); E05 #5 ACL (#28–30); E06 #6 portail (#31–33); E07 #7 CMS (#34, #35, #37; #36 doublon); E08 #8 documents (#38–40); E09 #9 contenu (#41–43); E10 #10 finance (#44–46); E11 #11 CRM (#47–49); E12 #12 Q&A (#50–52); E13 #13 analytics (#53–55); E14 #14 GitHub (#56–58); E15 #15 IA (#59–61).
+MVP E01–E10; V1.1 E11–E13; V2 E14–E15. Ne fermer aucun ticket sans preuves. Chaque issue contient périmètre, critères d'acceptation et epic parent.
