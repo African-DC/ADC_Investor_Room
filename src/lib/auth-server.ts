@@ -1,5 +1,7 @@
 import { convexBetterAuthReactStart } from '@convex-dev/better-auth/react-start'
 import { ConvexHttpClient } from 'convex/browser'
+import { getRequestHeader } from '@tanstack/react-start/server'
+import { requestConvexToken } from './auth-token'
 import type { FunctionReference,FunctionArgs,FunctionReturnType } from 'convex/server'
 /**
  * Server-side Convex bridge. One Convex JWT is fetched per server function invocation and reused for every call:
@@ -12,7 +14,7 @@ export function getAuthBridge(){
  if(process.env.ADC_AUTH_ENABLED!=='true'||!convexUrl||!convexSiteUrl)return null
  const base=convexBetterAuthReactStart({convexUrl,convexSiteUrl})
  let token:Promise<string|undefined>|null=null
- const getToken=()=>token??=base.getToken();
+ const getToken=()=>token??=requestConvexToken(convexSiteUrl,{cookie:getRequestHeader('cookie'),authorization:getRequestHeader('authorization')});
  const client=async()=>{const t=await getToken();const c=new ConvexHttpClient(convexUrl);if(t)c.setAuth(t);return c}
  return {
   handler:base.handler,

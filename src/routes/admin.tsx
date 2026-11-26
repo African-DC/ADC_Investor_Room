@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader,setResponseHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { getAuthBridge } from '../lib/auth-server'
+import { safeAuthFailure } from '../lib/auth-token'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { adminCommand } from '../features/admin/contracts'
@@ -22,20 +23,38 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge()
  if(!bridge||!adminAllowed())return null
+ let stage='token'
  try{
   if(!await bridge.getToken())return {problem:'signin' as const}
-  // Pending invitations for this verified email become memberships before the MFA gate.
-  await bridge.fetchAuthMutation(api.team.claim,{})
-  const mfa=await bridge.fetchAuthQuery(api.mfa.status,{})
+  stage='mfa-status'
+  let mfa=await bridge.fetchAuthQuery(api.mfa.status,{})
+  // Existing administrators should never be locked out by a failed invitation claim.
+  // For new members, claiming is still mandatory and remains verified-email gated.
+  if(!mfa||!data.roomId){
+   stage='invitation-claim'
+   try{await bridge.fetchAuthMutation(api.team.claim,{})}
+   catch(error){if(!mfa)throw error;console.warn('[adc:admin] invitation claim deferred',safeAuthFailure(error))}
+   stage='mfa-status'
+   mfa=await bridge.fetchAuthQuery(api.mfa.status,{})
+  }
   if(!mfa)return {problem:'membership' as const}
   if(!mfa.verified)return {mfa} as const
+  stage='room-membership'
   const identity=await bridge.fetchAuthQuery(api.admin.rooms,{})
   if(!identity)return {problem:'membership' as const}
   const room=data.roomId?identity.rooms.find(r=>r.id===data.roomId):identity.rooms[0]
   if(!room)return {problem:'membership' as const}
+  stage='dashboard'
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
   const metrics=await safe(bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id}));const contacts=await safe(bridge.fetchAuthQuery(api.crm.list,{roomId:room.id}));const questions=await safe(bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id}));const analytics=await safe(bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30}));const access=await safe(bridge.fetchAuthQuery(api.access.overview,{roomId:room.id}));const team=await safe(bridge.fetchAuthQuery(api.team.list,{roomId:room.id}));const emails=await safe(bridge.fetchAuthQuery(api.outbox.list,{roomId:room.id}));const nda=await safe(bridge.fetchAuthQuery(api.nda.adminView,{roomId:room.id}));const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
- }catch{return {problem:'unavailable' as const}}
+ }catch(error){
+  const failure=safeAuthFailure(error)
+  console.warn('[adc:admin] load failed',{stage,...failure})
+  if(failure.kind==='mfa-required'){
+   try{const mfa=await bridge.fetchAuthQuery(api.mfa.status,{});if(mfa&&!mfa.verified)return {mfa} as const}catch{/* remain fail-closed */}
+  }
+  return {problem:'unavailable' as const}
+ }
 })
 const command=createServerFn({method:'POST'}).validator(adminCommand).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
@@ -147,7 +166,7 @@ const touch=createServerFn({method:'POST'}).handler(async()=>{
 function AdminProblem({problem}:{problem:'signin'|'membership'|'unavailable'}){
  const [lang,setLang]=useState<'fr'|'en'>('fr'),fr=lang==='fr'
  const title=problem==='membership'?(fr?'Accès administrateur non attribué.':'Admin access not assigned.'):problem==='signin'?(fr?'Connexion requise.':'Sign-in required.'):(fr?'Connexion momentanément indisponible.':'Connection temporarily unavailable.')
- return <JourneyFrame space="admin" lang={lang} setLang={setLang} tone="alert"><h1>{title}</h1><p role="alert" className="frame-lead">{problem==='membership'?(fr?'Vérifiez que votre invitation est active et correspond à votre adresse e-mail vérifiée. Contactez ADC si nécessaire.':'Check that your invitation is active and matches your verified email. Contact ADC if needed.'):problem==='signin'?(fr?'Connectez-vous par lien ou code e-mail, puis validez votre Authenticator.':'Sign in by email link or code, then verify your authenticator.'):(fr?'Votre session n’a pas été supprimée. Réessayez sans demander de nouveau lien.':'Your session has not been deleted. Retry without requesting a new link.')}</p><button className="primary journey-primary" onClick={()=>location.reload()}>{fr?'Réessayer':'Retry'}</button><a className="secondary journey-link" href="/connexion?next=/admin">{fr?'Se connecter avec une adresse e-mail':'Sign in with an email address'}</a></JourneyFrame>
+ return <JourneyFrame space="admin" lang={lang} setLang={setLang} tone="alert"><h1>{title}</h1><p role="alert" className="frame-lead">{problem==='membership'?(fr?'Vérifiez que votre invitation est active et correspond à votre adresse e-mail vérifiée. Contactez ADC si nécessaire.':'Check that your invitation is active and matches your verified email. Contact ADC if needed.'):problem==='signin'?(fr?'Connectez-vous par lien ou code e-mail, puis validez votre Authenticator.':'Sign in by email link or code, then verify your authenticator.'):(fr?'Impossible de vérifier votre accès pour le moment. Réessayez ; si le problème persiste, reconnectez-vous par e-mail.':'Your access could not be verified. Retry; if the problem persists, sign in by email again.')}</p><button className="primary journey-primary" onClick={()=>location.reload()}>{fr?'Réessayer':'Retry'}</button><a className="secondary journey-link" href="/connexion?next=/admin">{fr?'Se connecter avec une adresse e-mail':'Sign in with an email address'}</a></JourneyFrame>
 }
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/connexion',search:{next:'/admin'}});return {state}

@@ -1,0 +1,12 @@
+import {describe,it,expect,vi} from 'vitest'
+import {requestConvexToken,AuthTokenError,safeAuthFailure} from '../src/lib/auth-token'
+const site='https://example-123.convex.site',credentials={cookie:'test-session=fake'}
+describe('request-scoped auth token exchange',()=>{
+ it('does not contact the backend without credentials',async()=>{const request=vi.fn<typeof fetch>();expect(await requestConvexToken(site,{},request)).toBeUndefined();expect(request).not.toHaveBeenCalled()})
+ it('forwards only authentication headers to the configured endpoint',async()=>{const request=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({token:'fake-jwt'})));expect(await requestConvexToken(site,credentials,request)).toBe('fake-jwt');const [url,options]=request.mock.calls[0];expect(String(url)).toBe(site+'/api/auth/convex/token');expect(new Headers(options?.headers).get('cookie')).toBe(credentials.cookie);expect(options?.redirect).toBe('manual');expect(options?.cache).toBe('no-store')})
+ it('distinguishes expired session from a temporary failure',async()=>{const request=vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null,{status:401}));expect(await requestConvexToken(site,credentials,request)).toBeUndefined();expect(request).toHaveBeenCalledTimes(1)})
+ it('retries a single transient upstream failure',async()=>{const request=vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null,{status:503})).mockResolvedValueOnce(new Response(JSON.stringify({token:'fake-jwt'})));expect(await requestConvexToken(site,credentials,request)).toBe('fake-jwt');expect(request).toHaveBeenCalledTimes(2)})
+ it('does not retry rate limiting or misreport it as sign-out',async()=>{const request=vi.fn<typeof fetch>().mockResolvedValue(new Response(null,{status:429}));await expect(requestConvexToken(site,credentials,request)).rejects.toMatchObject({reason:'rate-limit',status:429});expect(request).toHaveBeenCalledTimes(1)})
+ it('fails closed on malformed response or redirect',async()=>{for(const response of [new Response('{}'),new Response(null,{status:302,headers:{location:'https://example.com'}})]){await expect(requestConvexToken(site,credentials,vi.fn<typeof fetch>().mockResolvedValue(response))).rejects.toBeInstanceOf(AuthTokenError)}})
+ it('never reports raw exception contents in diagnostic data',()=>{expect(safeAuthFailure(new Error('private payload xyz'))).toEqual({kind:'backend-error'});expect(safeAuthFailure(new AuthTokenError('rate-limit',429))).toEqual({kind:'rate-limit',status:429})})
+})
