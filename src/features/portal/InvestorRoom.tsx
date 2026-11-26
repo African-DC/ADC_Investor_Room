@@ -24,7 +24,7 @@ type Locale=keyof typeof dictionary
 export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSend,engagement,intelligence}:{initial:Overview;refresh:(roomId?:string)=>Promise<Overview|null>;acceptNda:(roomId:string,version:string)=>Promise<{ok:boolean}>;questionRead:(roomId:string,id:string)=>Promise<Thread|null>;questionSend:(roomId:string,a:QuestionAction)=>Promise<{ok:boolean}>;intelligence:(a:{roomId:string;question:string;lang:Locale;externalConsent:boolean})=>Promise<Answer>;engagement:(a:{kind:'consent';roomId:string;allowed:boolean}|{kind:'section';roomId:string;sectionId:string})=>Promise<{ok:boolean}>}){
  const [lang,setLang]=useState<Locale>('fr'),[data,setData]=useState<Overview|null>(initial),[search,setSearch]=useState(''),[active,setActive]=useState<string|null>(null),[activeDocument,setActiveDocument]=useState<string|null>(null),[agreedVersion,setAgreedVersion]=useState<string|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(false),[menu,setMenu]=useState(false)
  const t=dictionary[lang]
- const sequence=useRef(0)
+ const sequence=useRef(0),lastVerified=useRef(Date.now())
  const agreed=!!data?.nda&&agreedVersion===data.nda.version
  const roomId=data?.room?.id
  // Recheck authorization periodically and on window focus. Clear the rendered content on failure.
@@ -32,11 +32,13 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
   let alive=true
   let misses=0
   // Access is re-checked often; a transient failure must not wipe the page, but a confirmed loss of access must.
-  async function load(){const token=++sequence.current;try{const next=await refresh(roomId);if(!alive||token!==sequence.current)return;if(next){misses=0;setData(next)}else if(++misses>=2)setData(null);else window.setTimeout(()=>void load(),2500)}catch{/* keep view; retried on next tick */}}
+  async function load(){const token=++sequence.current;try{const next=await refresh(roomId);if(!alive||token!==sequence.current)return;if(next){misses=0;lastVerified.current=Date.now();setData(next)}else if(++misses>=2){sequence.current++;setData(null)}else window.setTimeout(()=>{if(alive)void load()},2500)}catch{if(alive&&token===sequence.current)setError(true)}}
   const timer=window.setInterval(()=>void load(),30000)
-  const focus=()=>void load()
+  const checkAge=()=>{if(Date.now()-lastVerified.current>=90000){alive=false;sequence.current++;setData(null)}}
+  const expiry=window.setInterval(checkAge,1000)
+  const focus=()=>{checkAge();if(alive)void load()}
   window.addEventListener('focus',focus)
-  return ()=>{alive=false;sequence.current++;window.clearInterval(timer);window.removeEventListener('focus',focus)}
+  return ()=>{alive=false;sequence.current++;window.clearInterval(timer);window.clearInterval(expiry);window.removeEventListener('focus',focus)}
  },[roomId,refresh])
  useEffect(()=>{document.documentElement.lang=lang},[lang])
  const title=(s:Section)=>lang==='fr'?s.titleFr:s.titleEn
@@ -44,8 +46,8 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
  const visible=(data?.sections??[]).filter(s=>!search||[title(s),body(s)].some(v=>v.toLocaleLowerCase(lang).includes(search.toLocaleLowerCase(lang))))
  const selected=visible.find(s=>s.id===active)
  const selectedDocument=data?.documents.find(d=>d.id===activeDocument)
- async function reload(){setBusy(true);setError(false);const token=++sequence.current;try{const next=await refresh(roomId);if(token===sequence.current)setData(next)}catch{if(token===sequence.current)setError(true)}finally{setBusy(false)}}
- async function approve(){if(!data?.nda||!roomId||!agreed)return;setBusy(true);setError(false);sequence.current++;try{const r=await acceptNda(roomId,data.nda.version);if(!r.ok)throw new Error('Denied');const token=++sequence.current;const next=await refresh(roomId);if(token===sequence.current)setData(next);setAgreedVersion(null)}catch{setError(true)}finally{setBusy(false)}}
+ async function reload(){setBusy(true);setError(false);const token=++sequence.current;try{const next=await refresh(roomId);if(token===sequence.current){if(next)lastVerified.current=Date.now();setData(next)}}catch{if(token===sequence.current)setError(true)}finally{setBusy(false)}}
+ async function approve(){if(!data?.nda||!roomId||!agreed)return;setBusy(true);setError(false);sequence.current++;try{const r=await acceptNda(roomId,data.nda.version);if(!r.ok)throw new Error('Denied');const token=++sequence.current;const next=await refresh(roomId);if(token===sequence.current){if(next)lastVerified.current=Date.now();setData(next)};setAgreedVersion(null)}catch{setError(true)}finally{setBusy(false)}}
  function openSection(id:string){setActive(id);if(roomId&&data?.analytics?.allowed)void engagement({kind:'section',roomId,sectionId:id}).catch(()=>{})}
  async function consent(allowed:boolean){if(!roomId)return;setBusy(true);try{const result=await engagement({kind:'consent',roomId,allowed});if(!result.ok)throw Error('Unavailable');await reload()}catch{setError(true)}finally{setBusy(false)}}
  async function logout(){try{const r=await authClient.signOut();if(r.error)throw new Error('Sign out failed');sequence.current++;setData(null);location.replace('/')}catch{setError(true)}}

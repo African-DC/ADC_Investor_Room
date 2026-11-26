@@ -1,4 +1,4 @@
-import { query,mutation,internalMutation } from './_generated/server'
+import { query,mutation,internalMutation,internalQuery,action } from './_generated/server'
 import type { QueryCtx,MutationCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { v } from 'convex/values'
@@ -133,7 +133,7 @@ export const consumeDelivery=internalMutation({args:{ticket:v.string()},handler:
  const result=await versionFor(ctx,ticket.documentId,ticket.roomId)
  if(!result?.version.storageId||result.version._id!==ticket.versionId)return null
  const meta=await ctx.db.system.get(result.version.storageId)
- if(!meta||meta.size!==result.version.sizeBytes||meta.sha256!==result.version.sha256||meta.contentType!=='application/pdf')return null
+ if(!meta||meta.size!==result.version.sizeBytes||!storageShaMatches(meta.sha256,result.version.sha256)||meta.contentType!=='application/pdf')return null
  return {storageId:result.version.storageId,sizeBytes:result.version.sizeBytes,sha256:result.version.sha256}
 }})
 export const purgeTickets=internalMutation({args:{},handler:async ctx=>{
@@ -156,10 +156,31 @@ export const attestManualReview=mutation({args:{roomId:v.id('rooms'),documentId:
  return {ok:true}
 }})
 
-/** Reviewer preview of a DRAFT only (MFA + content:review). Published files are never served this way. */
-export const reviewUrl=query({args:{roomId:v.id('rooms'),documentId:v.id('documents')},handler:async(ctx,a)=>{
- await admin(ctx,a.roomId,'content:review')
- const d=await ctx.db.get(a.documentId);if(!d||d.roomId!==a.roomId||d.status!=='draft'||!d.currentVersionId)return null
- const version=await ctx.db.get(d.currentVersionId);if(!version||version.state!=='draft'||!version.storageId)return null
- return await ctx.storage.getUrl(version.storageId)
+/** Draft preview is subject to the same room membership and MFA checks as review. No storage URL leaves Convex. */
+async function reviewVersion(ctx:QueryCtx,roomId:Id<'rooms'>,documentId:Id<'documents'>){
+ await admin(ctx,roomId,'content:review')
+ const d=await ctx.db.get(documentId)
+ if(!d||d.roomId!==roomId||d.status!=='draft'||!d.currentVersionId)return null
+ const version=await ctx.db.get(d.currentVersionId)
+ if(!version||version.roomId!==roomId||version.documentId!==documentId||version.state!=='draft'||version.mime!=='application/pdf'||!version.storageId||!Number.isSafeInteger(version.sizeBytes)||version.sizeBytes<5||version.sizeBytes>maxSize)return null
+ const meta=await ctx.db.system.get(version.storageId)
+ if(!meta||meta.size!==version.sizeBytes||!storageShaMatches(meta.sha256,version.sha256)||meta.contentType!=='application/pdf')return null
+ return {storageId:version.storageId,versionId:version._id,sha256:version.sha256,sizeBytes:version.sizeBytes}
+}
+const reviewArgs={roomId:v.id('rooms'),documentId:v.id('documents')}
+export const reviewUrl=query({args:reviewArgs,returns:v.boolean(),handler:async(ctx,a)=>!!await reviewVersion(ctx,a.roomId,a.documentId)})
+export const reviewSource=internalQuery({args:reviewArgs,returns:v.union(v.null(),v.object({storageId:v.id('_storage'),versionId:v.id('documentVersions'),sha256:v.string(),sizeBytes:v.number()})),handler:(ctx,a)=>reviewVersion(ctx,a.roomId,a.documentId)})
+export const reviewFile=action({args:{...reviewArgs,deliverySecret:v.string()},returns:v.union(v.null(),v.object({bytes:v.bytes(),sha256:v.string(),sizeBytes:v.number()})),handler:async(ctx,a):Promise<{bytes:ArrayBuffer;sha256:string;sizeBytes:number}|null>=>{
+ const secret=process.env.ADC_DOCUMENT_DELIVERY_SECRET
+ if(!secret||secret.length<32||a.deliverySecret!==secret)return null
+ const scope={roomId:a.roomId,documentId:a.documentId}
+ const source=await ctx.runQuery(internal.documents.reviewSource,scope)
+ if(!source)return null
+ const blob=await ctx.storage.get(source.storageId)
+ if(!blob||blob.size!==source.sizeBytes)return null
+ const bytes=await blob.arrayBuffer()
+ // Re-check authorization and current version after retrieving the private object.
+ const current=await ctx.runQuery(internal.documents.reviewSource,scope)
+ if(!current||current.versionId!==source.versionId||current.storageId!==source.storageId)return null
+ return {bytes,sha256:source.sha256,sizeBytes:source.sizeBytes}
 }})

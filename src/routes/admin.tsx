@@ -46,7 +46,9 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   if(!room)return {problem:'membership' as const}
   stage='dashboard'
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
-  const metrics=await safe(bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id}));const contacts=await safe(bridge.fetchAuthQuery(api.crm.list,{roomId:room.id}));const questions=await safe(bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id}));const analytics=await safe(bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30}));const access=await safe(bridge.fetchAuthQuery(api.access.overview,{roomId:room.id}));const team=await safe(bridge.fetchAuthQuery(api.team.list,{roomId:room.id}));const emails=await safe(bridge.fetchAuthQuery(api.outbox.list,{roomId:room.id}));const nda=await safe(bridge.fetchAuthQuery(api.nda.adminView,{roomId:room.id}));const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
+  const [metrics,contacts,questions,analytics,access,team,emails,nda]=await Promise.all([
+   safe(bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.crm.list,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30})),safe(bridge.fetchAuthQuery(api.access.overview,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.team.list,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.outbox.list,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.nda.adminView,{roomId:room.id}))
+  ]);const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
  }catch(error){
   const failure=safeAuthFailure(error)
   console.warn('[adc:admin] load failed',{stage,...failure})
@@ -151,7 +153,7 @@ const createLink=createServerFn({method:'POST'}).validator(linkInput).handler(as
 const reviewUrl=createServerFn({method:'POST'}).validator(z.object({roomId:z.string().max(128),documentId:z.string().max(128)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())return null
- try{return await bridge.fetchAuthQuery(api.documents.reviewUrl,{roomId:data.roomId as Id<'rooms'>,documentId:data.documentId as Id<'documents'>})}catch{return null}
+ try{const allowed=await bridge.fetchAuthQuery(api.documents.reviewUrl,{roomId:data.roomId as Id<'rooms'>,documentId:data.documentId as Id<'documents'>});return allowed?'/api/documents/file?'+new URLSearchParams({roomId:data.roomId,documentId:data.documentId,review:'1'}).toString():null}catch{return null}
 })
 const uploadImage=createServerFn({method:'POST'}).validator(z.object({roomId:z.string().max(128),dataUrl:z.string().max(900000),width:z.number().int().min(1).max(4000),height:z.number().int().min(1).max(4000)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
