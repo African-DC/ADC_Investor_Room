@@ -5,6 +5,7 @@ import type { Id } from './_generated/dataModel'
 import { v } from 'convex/values'
 import { authComponent } from './auth'
 import { admin } from './admin'
+import { enqueue } from './outbox'
 export const CAPS=['investors:read','access:manage','content:edit','content:review','finance:edit','finance:review','crm:read','crm:edit','qa:read','qa:reply','analytics:read','technical:read'] as const
 type Cap=typeof CAPS[number]
 const INVITE_TTL=14*86400_000
@@ -15,7 +16,9 @@ async function createInvite(ctx:MutationCtx,roomId:Id<'rooms'>,email:string,capa
  if(!await ctx.db.get(roomId))throw new Error('Unavailable')
  for(const prior of await ctx.db.query('adminInvites').withIndex('by_email',q=>q.eq('email',e)).collect())if(prior.roomId===roomId&&!prior.acceptedAt&&!prior.revokedAt)await ctx.db.patch(prior._id,{revokedAt:Date.now()})
  const id=await ctx.db.insert('adminInvites',{email:e,roomId,capabilities:caps(capabilities),invitedBy,createdAt:Date.now(),expiresAt:Date.now()+INVITE_TTL})
- await ctx.db.insert('auditLogs',{actorId:invitedBy,event:'team.invited',resourceId:id,at:Date.now()});return id
+ await ctx.db.insert('auditLogs',{actorId:invitedBy,event:'team.invited',resourceId:id,at:Date.now()})
+ await enqueue(ctx,{key:'admin_invite:'+id,kind:'admin_invite',to:e,roomId,vars:{email:e,expires:new Intl.DateTimeFormat('fr-FR',{dateStyle:'long',timeZone:'UTC'}).format(Date.now()+INVITE_TTL)}})
+ return id
 }
 /** Operator CLI bootstrap. */
 export const inviteInternal=internalMutation({args:{roomId:v.id('rooms'),email:v.string(),capabilities:v.array(v.string()),operatorId:v.string()},handler:(ctx,a)=>createInvite(ctx,a.roomId,a.email,a.capabilities,a.operatorId)})

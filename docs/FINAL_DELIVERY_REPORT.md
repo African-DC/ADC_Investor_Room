@@ -42,3 +42,10 @@ Aucun identifiant de service n'est disponible dans ce conteneur cloud (pas de `C
 - **Resend** : domaine vérifié `klassci.com` (click/open tracking désactivés). Clé dédiée `adc-investor-room-recette`, permission envoi seul, limitée à ce domaine. Expéditeur recette : `investor-room@klassci.com` (à remplacer par un domaine ADC dédié avant production).
 - **Preuve** : POST `/api/auth/sign-in/magic-link` pour `delivered@resend.dev` → HTTP 200, e-mail « ADC Investor Room — Vérifiez votre accès » au statut `delivered` dans Resend.
 - **Design** : palette alignée sur adc-website (orange #e8590c / #c2410c, vert #1a5d3a, ivoire #fbf7f2).
+
+## Mise à jour 2026-11-26 — avancement
+- Back-office : coque UI SDK (navigation, palette ⌘K, toasts, confirmations), éditeur de pages par blocs (texte riche Tiptap, graphiques SVG validés, images, galerie), matrice d'accès datée, groupes, liens d'invitation temporaires, équipe ADC (invitations, rôles, révocation), journal des notifications.
+- Sécurité : MFA TOTP lié à la session sur toutes les fonctions d'administration ; publication en deux temps (auteur ≠ relecteur) ; documents vérifiés manuellement en recette (`ADC_MANUAL_SCAN_ALLOWED`), aucune URL de stockage exposée.
+- Notifications : outbox idempotente (clé unique + Idempotency-Key Resend), reprises 1 min → 6 h, statut « envoyé » uniquement après acceptation Resend. Preuve : e-mail « Votre accès est ouvert » vers delivered@resend.dev → statut sent + `delivered` côté Resend.
+- Expéditeur : `investor-room@africandigitconsulting.com` (domaine vérifié Resend, tracking désactivé).
+- Restant avant production : recette complète avec comptes réels, base Convex de production sans drapeaux de staging, antivirus réel, traductions EN, déploiement Vercel sans contournement (auteur des commits), audit accessibilité/performance, sauvegarde/restauration.

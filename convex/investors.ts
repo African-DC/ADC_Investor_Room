@@ -3,6 +3,7 @@ import type {QueryCtx,MutationCtx} from './_generated/server'
 import type {Id} from './_generated/dataModel'
 import { authComponent } from './auth'
 import { v } from 'convex/values'
+import { enqueue,adminRecipients } from './outbox'
 async function intakeRoom(ctx:QueryCtx|MutationCtx){
  if(process.env.ADC_CONVEX_INTAKE_ENABLED!=='true'||!process.env.ADC_INTAKE_ROOM_ID)return null
  const id=ctx.db.normalizeId('rooms',process.env.ADC_INTAKE_ROOM_ID)
@@ -16,6 +17,8 @@ async function linkApplicant(ctx:MutationCtx,roomId:Id<'rooms'>,profileId:Id<'in
  if(existing)return
  await ctx.db.insert('roomApplicants',{roomId,profileId})
  await ctx.db.insert('auditLogs',{actorId:userId,event:'investor.access_requested',resourceId:profileId,at:Date.now()})
+ await enqueue(ctx,{key:'request_received:'+roomId+':'+profileId,kind:'request_received',to:profile.email,roomId,vars:{name:profile.name}})
+ for(const a of await adminRecipients(ctx,roomId))await enqueue(ctx,{key:'new_request:'+roomId+':'+profileId+':'+a.email,kind:'new_request',to:a.email,roomId,vars:{name:profile.name,email:profile.email,organization:profile.organization??'',room:room.name}})
 }
 export const me=query({args:{},handler:async ctx=>{
  const user=await authComponent.safeGetAuthUser(ctx)

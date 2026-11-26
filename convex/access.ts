@@ -7,6 +7,7 @@ import { v } from 'convex/values'
 import { admin } from './admin'
 import { identity } from './portal'
 import { sha256Hex } from './lib/totp'
+import { enqueue } from './outbox'
 const capability=v.union(v.literal('room:read'),v.literal('section:read'),v.literal('document:read'),v.literal('document:download'))
 const target=v.object({capability,resourceId:v.optional(v.string())})
 type Target={capability:'room:read'|'section:read'|'document:read'|'document:download';resourceId?:string}
@@ -32,10 +33,13 @@ export const setAccess=mutation({args:{roomId:v.id('rooms'),profileIds:v.array(v
  checkWindow(a.startsAt,a.expiresAt,now);await checkTargets(ctx,a.roomId,a.targets)
  if(a.groupId){const g=await ctx.db.get(a.groupId);if(!g||g.roomId!==a.roomId)throw new Error('Invalid group')}
  let count=0
+ const room=await ctx.db.get(a.roomId),fmtDay=(n:number)=>new Intl.DateTimeFormat('fr-FR',{dateStyle:'long',timeZone:'UTC'}).format(n)
  for(const profileId of new Set(a.profileIds)){
   const link=await ctx.db.query('roomApplicants').withIndex('by_room_profile',q=>q.eq('roomId',a.roomId).eq('profileId',profileId)).unique()
   const profile=link?await ctx.db.get(profileId):null;if(!profile)throw new Error('Investor not in room')
-  for(const t of a.targets){await ctx.db.insert('accessGrants',{authUserId:profile.authUserId,roomId:a.roomId,capability:t.capability,resourceId:t.resourceId,effect:a.effect,startsAt:a.startsAt,expiresAt:a.expiresAt,groupId:a.groupId});count++}
+  let first:string|null=null
+  for(const t of a.targets){const gid=await ctx.db.insert('accessGrants',{authUserId:profile.authUserId,roomId:a.roomId,capability:t.capability,resourceId:t.resourceId,effect:a.effect,startsAt:a.startsAt,expiresAt:a.expiresAt,groupId:a.groupId});first??=gid;count++}
+  if(a.effect==='allow'&&first&&a.targets.some(t=>t.capability==='room:read'||t.capability==='section:read'))await enqueue(ctx,{key:'access_granted:'+first,kind:'access_granted',to:profile.email,roomId:a.roomId,vars:{name:profile.name,room:room?.name??'Data Room ADC',until:a.expiresAt?fmtDay(a.expiresAt):''}})
  }
  await ctx.db.insert('auditLogs',{actorId:user._id,event:'access.batch_'+a.effect+':'+count,resourceId:a.roomId,at:now})
  return {count}

@@ -2,6 +2,7 @@ import {query,mutation,internalMutation} from './_generated/server'
 import type {QueryCtx,MutationCtx} from './_generated/server'
 import type {Id} from './_generated/dataModel'
 import {v} from 'convex/values'
+import { enqueue,emailOf } from './outbox'
 import {admin} from './admin'
 import {identity,grantsFor,acceptance} from './portal'
 import {permits} from './lib/roomPolicy'
@@ -83,7 +84,10 @@ export const adminRead=query({args:{roomId:v.id('rooms'),questionId:v.id('questi
 export const adminReply=mutation({args:{roomId:v.id('rooms'),questionId:v.id('questions'),body:v.string()},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'qa:reply')
  if(!enabled())throw Error('Unavailable')
- return post(ctx,a,user._id,'adc')
+ const result=await post(ctx,a,user._id,'adc')
+ const q=await ctx.db.get(a.questionId),u=q?await emailOf(ctx,q.authUserId):null
+ if(q&&u)await enqueue(ctx,{key:'qa_answer:'+q._id+':'+(q.updatedAt??Date.now()),kind:'qa_answer',to:u.email,roomId:a.roomId,vars:{subject:q.subject}})
+ return result
 }})
 export const close=mutation({args:{roomId:v.id('rooms'),questionId:v.id('questions')},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'qa:reply')

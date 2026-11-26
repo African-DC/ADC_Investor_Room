@@ -619,3 +619,4 @@ ul.bk-list{list-style:disc}ol.bk-list{list-style:decimal}.bk-list li{padding-lef
 .tm-tags{display:flex;flex-wrap:wrap;gap:4px}.tm-tag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:99px;background:#fbf3ec;color:#8a3d0a}
 .tm-actions{display:flex;gap:6px;align-items:center}.tm-sub{margin-top:8px!important}
 .tm-actions .dr-btn{height:34px;padding:0 12px}
+.el-err{color:#9f3030!important;max-width:260px;white-space:normal}

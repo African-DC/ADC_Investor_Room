@@ -9,6 +9,7 @@ import { MAX_UPLOAD,validUpload } from '../src/features/documents/uploadRules'
 import { recordAuthorized } from './analytics'
 import { permits } from './lib/roomPolicy'
 import { storageShaMatches } from './lib/hash'
+import { enqueue,emailOf } from './outbox'
 const maxSize=MAX_UPLOAD
 function enabled(){return process.env.ADC_CONVEX_PORTAL_ENABLED==='true'&&process.env.ADC_CONVEX_DOCUMENTS_ENABLED==='true'}
 function staging(){if(process.env.ADC_STAGING_CMS!=='true')throw Error('Staging disabled')}
@@ -74,7 +75,10 @@ export const recordScan=internalMutation({args:{versionId:v.id('documentVersions
 export const publish=internalMutation({args:{documentId:v.id('documents'),operatorId:v.string()},handler:async(ctx,a)=>{
  staging();const actor=validateText(a.operatorId,200),d=await ctx.db.get(a.documentId),version=d?.currentVersionId?await ctx.db.get(d.currentVersionId):null
  if(!d||d.status!=='draft'||!version||version.documentId!==d._id||version.roomId!==d.roomId||version.state!=='draft'||version.scanStatus!=='clean'||version.authorId===actor)throw Error('Publication denied')
- await ctx.db.patch(version._id,{state:'published',reviewerId:actor});await ctx.db.patch(d._id,{status:'published'});await ctx.db.insert('auditLogs',{actorId:actor,event:'staging.document.published',resourceId:d._id,at:Date.now()})
+ await ctx.db.patch(version._id,{state:'published',reviewerId:actor});await ctx.db.patch(d._id,{status:'published'})
+ const room=await ctx.db.get(d.roomId),now=Date.now(),seen=new Set<string>()
+ for(const g of await ctx.db.query('accessGrants').collect()){if(g.roomId!==d.roomId||g.capability!=='document:read'||g.resourceId!==d._id||g.effect!=='allow'||g.revokedAt||(g.expiresAt&&g.expiresAt<=now)||seen.has(g.authUserId))continue;seen.add(g.authUserId);const u=await emailOf(ctx,g.authUserId);if(u)await enqueue(ctx,{key:'document_published:'+version._id+':'+g.authUserId,kind:'document_published',to:u.email,roomId:d.roomId,vars:{title:d.titleFr,room:room?.name??'Data Room ADC'}})}
+ await ctx.db.insert('auditLogs',{actorId:actor,event:'staging.document.published',resourceId:d._id,at:Date.now()})
 }})
 export const grant=internalMutation({args:{roomId:v.id('rooms'),documentId:v.id('documents'),authUserId:v.string(),capability:v.union(v.literal('document:read'),v.literal('document:download')),effect:v.union(v.literal('allow'),v.literal('deny')),expiresAt:v.optional(v.number()),operatorId:v.string()},handler:async(ctx,a)=>{
  staging();const actor=validateText(a.operatorId,200),d=await ctx.db.get(a.documentId)

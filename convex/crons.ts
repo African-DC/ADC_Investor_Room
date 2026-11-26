@@ -5,4 +5,5 @@ const crons=cronJobs()
 crons.interval('engagement retention',{hours:1},internal.analytics.purge,{})
 crons.interval('intelligence quota retention',{hours:1},internal.intelligence.purge,{})
 crons.interval('document ticket retention',{minutes:5},internal.documents.purgeTickets,{})
+crons.interval('email outbox sweep',{minutes:10},internal.outbox.sweep,{})
 export default crons
