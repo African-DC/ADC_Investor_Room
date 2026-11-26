@@ -44,7 +44,7 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
  const visible=(data?.sections??[]).filter(s=>!search||[title(s),body(s)].some(v=>v.toLocaleLowerCase(lang).includes(search.toLocaleLowerCase(lang))))
  const selected=visible.find(s=>s.id===active)
  const selectedDocument=data?.documents.find(d=>d.id===activeDocument)
- async function reload(){setBusy(true);setError(false);const token=++sequence.current;try{const next=await refresh(roomId);if(token===sequence.current)setData(next)}catch{if(token===sequence.current)setData(null)}finally{setBusy(false)}}
+ async function reload(){setBusy(true);setError(false);const token=++sequence.current;try{const next=await refresh(roomId);if(token===sequence.current)setData(next)}catch{if(token===sequence.current)setError(true)}finally{setBusy(false)}}
  async function approve(){if(!data?.nda||!roomId||!agreed)return;setBusy(true);setError(false);sequence.current++;try{const r=await acceptNda(roomId,data.nda.version);if(!r.ok)throw new Error('Denied');const token=++sequence.current;const next=await refresh(roomId);if(token===sequence.current)setData(next);setAgreedVersion(null)}catch{setError(true)}finally{setBusy(false)}}
  function openSection(id:string){setActive(id);if(roomId&&data?.analytics?.allowed)void engagement({kind:'section',roomId,sectionId:id}).catch(()=>{})}
  async function consent(allowed:boolean){if(!roomId)return;setBusy(true);try{const result=await engagement({kind:'consent',roomId,allowed});if(!result.ok)throw Error('Unavailable');await reload()}catch{setError(true)}finally{setBusy(false)}}

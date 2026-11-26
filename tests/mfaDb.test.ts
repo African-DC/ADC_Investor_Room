@@ -39,3 +39,10 @@ it('recovery codes are single use; repeated failures lock the account',async()=>
  await t.mutation(internal.mfa.resetForUser,{authUserId:U,operatorId:'ops'})
  await expect(check(t,'s3')).rejects.toThrow('MFA required')
 })
+
+it('idle expiry is server enforced even with an unexpired legacy proof; activity cannot revive an expired proof',async()=>{
+ const t=await setup()
+ await t.mutation(internal.mfa.recordAttempt,{userId:U,sessionId:'s1',step:100,activate:['h1']})
+ await t.run(async ctx=>{const p=await ctx.db.query('adminMfaProofs').withIndex('by_session',q=>q.eq('sessionId','s1')).unique();if(!p)throw Error('missing proof');await ctx.db.patch(p._id,{lastActivityAt:Date.now()-9*3600_000,expiresAt:Date.now()+3600_000})})
+ await expect(check(t,'s1')).rejects.toThrow('MFA required')
+})
