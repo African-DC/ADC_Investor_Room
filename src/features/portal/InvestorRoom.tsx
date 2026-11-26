@@ -32,9 +32,9 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
   let alive=true
   let misses=0
   // Access is re-checked often; a transient failure must not wipe the page, but a confirmed loss of access must.
-  async function load(){const token=++sequence.current;try{const next=await refresh(roomId);if(!alive||token!==sequence.current)return;if(next){misses=0;lastVerified.current=Date.now();setData(next)}else if(++misses>=2){sequence.current++;setData(null)}else window.setTimeout(()=>{if(alive)void load()},2500)}catch{if(alive&&token===sequence.current)setError(true)}}
+  async function load(){if(!alive)return;const token=++sequence.current;try{const next=await refresh(roomId);if(!alive||token!==sequence.current)return;if(next){misses=0;lastVerified.current=Date.now();setError(false);setData(next)}else if(++misses>=2){sequence.current++;setData(null)}else window.setTimeout(()=>{if(alive)void load()},2500)}catch{if(alive&&token===sequence.current)setError(true)}}
   const timer=window.setInterval(()=>void load(),30000)
-  const checkAge=()=>{if(Date.now()-lastVerified.current>=90000){alive=false;sequence.current++;setData(null)}}
+  const checkAge=()=>{if(alive&&Date.now()-lastVerified.current>=90000){alive=false;sequence.current++;setData(null)}}
   const expiry=window.setInterval(checkAge,1000)
   const focus=()=>{checkAge();if(alive)void load()}
   window.addEventListener('focus',focus)
