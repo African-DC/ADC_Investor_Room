@@ -1,11 +1,14 @@
 // Notion-like content blocks. Shared by Convex (validation) and the UI (editor/renderer).
 import { z } from 'zod'
+import { sanitizeRich,richToText } from './rich'
+import type { RichNode } from './rich'
 const t=(max:number)=>z.string().max(max)
 const id=z.string().regex(/^[a-z0-9]{6,24}$/)
 const imageRef=z.string().regex(/^([a-z0-9]{20,40})?$/)
 export const blockSchema=z.discriminatedUnion('type',[
  z.object({id,type:z.literal('heading'),level:z.union([z.literal(2),z.literal(3)]),text:t(200)}),
  z.object({id,type:z.literal('paragraph'),text:t(8000)}),
+ z.object({id,type:z.literal('rich'),doc:z.custom<RichNode>(v=>!!v&&typeof v==='object')}),
  z.object({id,type:z.literal('list'),ordered:z.boolean(),items:z.array(t(1000)).max(60)}),
  z.object({id,type:z.literal('callout'),tone:z.enum(['info','success','warning','brand']),title:t(160),text:t(4000)}),
  z.object({id,type:z.literal('stats'),items:z.array(z.object({value:t(40),label:t(160)})).max(8)}),
@@ -29,13 +32,15 @@ export const MAX_BLOCKS_JSON=250_000
 export function parseBlocks(json:string|undefined|null):Block[]|null{
  if(!json)return null
  if(json.length>MAX_BLOCKS_JSON)throw new Error('Content too large')
- const r=blocksSchema.safeParse(JSON.parse(json));if(!r.success)throw new Error('Invalid blocks');return r.data
+ const r=blocksSchema.safeParse(JSON.parse(json));if(!r.success)throw new Error('Invalid blocks')
+ return r.data.map(b=>b.type==='rich'?{...b,doc:sanitizeRich(b.doc)}:b)
 }
 /** Plain-text projection used for search, AI retrieval and legacy fallback. */
 export function blocksToText(blocks:Block[]){
  return blocks.map(b=>{switch(b.type){
   case 'heading':return b.text.toUpperCase()
   case 'paragraph':return b.text
+  case 'rich':return richToText(b.doc)
   case 'list':return b.items.map((x,i)=>(b.ordered?(i+1)+'. ':'• ')+x).join('\n')
   case 'callout':return [b.title,b.text].filter(Boolean).join('\n')
   case 'stats':return b.items.map(x=>'• '+x.value+' — '+x.label).join('\n')

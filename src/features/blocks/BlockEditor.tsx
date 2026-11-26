@@ -3,19 +3,21 @@ import type { ReactNode } from 'react'
 import { GripVertical,ArrowUp,ArrowDown,Copy,Trash2,Plus,Heading,Pilcrow,List,MessageSquareQuote,Minus,Table2,BarChart3,LayoutGrid,ListChecks,FileText,Link2,Info,Hash,X,LineChart,Image as ImageIcon,Columns2,LayoutPanelLeft } from 'lucide-react'
 import { newId } from './schema'
 import { ImagePicker } from './ImagePicker'
+import { RichEditor } from './RichEditor'
 import type { Uploader } from './ImagePicker'
 import type { ImageMap } from './BlockView'
 import { SERIES } from './Chart'
 import type { Block,BlockType } from './schema'
 type Doc={id:string;titleFr:string}
 const palette:{type:BlockType;label:string;hint:string;icon:typeof Heading}[]=[
- {type:'heading',label:'Titre',hint:'Intertitre de section',icon:Heading},{type:'paragraph',label:'Texte',hint:'Paragraphe',icon:Pilcrow},{type:'list',label:'Liste',hint:'À puces ou numérotée',icon:List},
+ {type:'heading',label:'Titre',hint:'Intertitre de section',icon:Heading},{type:'rich',label:'Texte',hint:'Polices, gras, couleurs, liens…',icon:Pilcrow},{type:'paragraph',label:'Texte simple',hint:'Sans mise en forme',icon:Pilcrow},{type:'list',label:'Liste',hint:'À puces ou numérotée',icon:List},
  {type:'callout',label:'Encadré',hint:'Information mise en avant',icon:Info},{type:'stats',label:'Chiffres clés',hint:'Indicateurs en grand',icon:Hash},{type:'cards',label:'Cartes',hint:'Grille de points forts',icon:LayoutGrid},
  {type:'table',label:'Tableau',hint:'Lignes et colonnes',icon:Table2},{type:'allocation',label:'Répartition',hint:'Barres de pourcentage',icon:BarChart3},{type:'status',label:'Statuts',hint:'Fait / en cours / à venir',icon:ListChecks},
  {type:'chart',label:'Graphique',hint:'Barres, courbes, aires, anneau',icon:LineChart},{type:'image',label:'Image',hint:'Pleine largeur, centrée…',icon:ImageIcon},{type:'media',label:'Image + texte',hint:'Image à gauche ou à droite',icon:LayoutPanelLeft},{type:'gallery',label:'Galerie',hint:'Grille de 2 à 4 images',icon:Columns2},
  {type:'quote',label:'Citation',hint:'Phrase forte',icon:MessageSquareQuote},{type:'document',label:'Document',hint:'PDF de la bibliothèque',icon:FileText},{type:'link',label:'Lien',hint:'Lien externe sécurisé',icon:Link2},{type:'divider',label:'Séparateur',hint:'Ligne de séparation',icon:Minus},
 ]
 export function emptyBlock(type:BlockType):Block{const id=newId();switch(type){
+ case 'rich':return {id,type,doc:{type:'doc',content:[{type:'paragraph'}]}};
  case 'heading':return {id,type,level:2,text:''};case 'paragraph':return {id,type,text:''};case 'list':return {id,type,ordered:false,items:['']}
  case 'callout':return {id,type,tone:'brand',title:'',text:''};case 'stats':return {id,type,items:[{value:'',label:''},{value:'',label:''}]}
  case 'table':return {id,type,header:true,rows:[['',''],['','']]};case 'quote':return {id,type,text:'',author:''};case 'divider':return {id,type}
@@ -49,7 +51,8 @@ function Rows<T>({items,onChange,make,render,add}:{items:T[];onChange:(x:T[])=>v
 }
 function fields(b:Block,set:(b:Block)=>void,documents:Doc[],images:ImageMap,upload:Uploader):ReactNode{switch(b.type){
  case 'heading':return <div className="be-inline"><select value={b.level} onChange={e=>set({...b,level:Number(e.target.value) as 2|3})}><option value={2}>Grand titre</option><option value={3}>Sous-titre</option></select><Line className={'h'+b.level} value={b.text} onChange={text=>set({...b,text})} placeholder="Titre…"/></div>
- case 'paragraph':return <Area value={b.text} onChange={text=>set({...b,text})} placeholder="Écrivez votre texte…" rows={4}/>
+ case 'rich':return <RichEditor value={b.doc} onChange={doc=>set({...b,doc})}/>
+ case 'paragraph':return <><Area value={b.text} onChange={text=>set({...b,text})} placeholder="Écrivez votre texte…" rows={4}/><button type="button" className="be-add" onClick={()=>set({id:b.id,type:'rich',doc:{type:'doc',content:b.text.split(/\n\s*\n/).map(p=>({type:'paragraph',content:p.trim()?[{type:'text',text:p.trim()}]:undefined}))}})}><Plus size={14}/>Convertir en texte riche (polices, gras, couleurs…)</button></>
  case 'list':return <><label className="be-toggle"><input type="checkbox" checked={b.ordered} onChange={e=>set({...b,ordered:e.target.checked})}/>Liste numérotée</label><Area value={b.items.join('\n')} onChange={v=>set({...b,items:v.split('\n')})} placeholder="Un élément par ligne" rows={4}/></>
  case 'callout':return <><div className="be-inline"><select value={b.tone} onChange={e=>set({...b,tone:e.target.value as typeof b.tone})}><option value="brand">ADC (orange)</option><option value="info">Information</option><option value="success">Réussite</option><option value="warning">Attention</option></select><Line value={b.title} onChange={title=>set({...b,title})} placeholder="Titre de l’encadré"/></div><Area value={b.text} onChange={text=>set({...b,text})} placeholder="Contenu" rows={2}/></>
  case 'stats':return <Rows items={b.items} onChange={items=>set({...b,items})} make={()=>({value:'',label:''})} add="Ajouter un chiffre" render={(x,s)=><><Line className="w-sm" value={x.value} onChange={value=>s({...x,value})} placeholder="15"/><Line value={x.label} onChange={label=>s({...x,label})} placeholder="Établissements référencés"/></>}/>

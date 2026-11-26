@@ -1,6 +1,7 @@
 import { CheckCircle2,CircleDashed,Clock3,ExternalLink,FileText,Info,AlertTriangle,Sparkles,Eye } from 'lucide-react'
 import type { Block } from './schema'
 import { Chart } from './Chart'
+import { RichText } from './RichText'
 export type ImageMap=Record<string,{src:string;width:number;height:number}>
 type Doc={id:string;titleFr:string;titleEn:string}
 // Renders validated blocks. Document blocks only render when the document is in the caller's ACL-filtered list.
@@ -9,6 +10,7 @@ export function BlockView({blocks,lang,documents=[],openDocument,images={}}:{blo
  function render(b:Block){switch(b.type){
   case 'heading':return b.level===2?<h2 className="bk-h2">{b.text}</h2>:<h3 className="bk-h3">{b.text}</h3>
   case 'paragraph':return <p className="bk-p">{b.text}</p>
+  case 'rich':return <RichText doc={b.doc}/>
   case 'list':{const L=b.ordered?'ol':'ul';return <L className="bk-list">{b.items.filter(Boolean).map((x,i)=><li key={i}>{x}</li>)}</L>}
   case 'callout':{const I={info:Info,success:CheckCircle2,warning:AlertTriangle,brand:Sparkles}[b.tone];return <aside className={'bk-callout tone-'+b.tone}><I size={20} aria-hidden="true"/><div>{b.title&&<strong>{b.title}</strong>}{b.text&&<p>{b.text}</p>}</div></aside>}
   case 'stats':return <dl className="bk-stats">{b.items.map((x,i)=><div key={i}><dt>{x.label}</dt><dd>{x.value}</dd></div>)}</dl>

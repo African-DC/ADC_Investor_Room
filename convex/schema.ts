@@ -28,4 +28,5 @@ export default defineSchema({
  accessLinks:defineTable({roomId:v.id('rooms'),tokenHash:v.string(),label:v.string(),targets:v.array(v.object({capability:v.string(),resourceId:v.optional(v.string())})),email:v.optional(v.string()),startsAt:v.number(),expiresAt:v.number(),grantUntil:v.optional(v.number()),maxUses:v.number(),uses:v.number(),revokedAt:v.optional(v.number()),createdBy:v.string(),createdAt:v.number()}).index('by_token',['tokenHash']).index('by_room',['roomId']),
  accessLinkUses:defineTable({linkId:v.id('accessLinks'),authUserId:v.string(),at:v.number()}).index('by_link_user',['linkId','authUserId']),
  contentImages:defineTable({roomId:v.id('rooms'),dataUrl:v.string(),width:v.number(),height:v.number(),bytes:v.number(),createdBy:v.string(),createdAt:v.number()}).index('by_room',['roomId']),
+ adminInvites:defineTable({email:v.string(),roomId:v.id('rooms'),capabilities:v.array(v.string()),invitedBy:v.string(),createdAt:v.number(),expiresAt:v.number(),acceptedAt:v.optional(v.number()),acceptedBy:v.optional(v.string()),revokedAt:v.optional(v.number())}).index('by_email',['email']).index('by_room',['roomId']),
 })

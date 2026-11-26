@@ -29,6 +29,7 @@ import type * as mfa from "../mfa.js";
 import type * as portal from "../portal.js";
 import type * as qa from "../qa.js";
 import type * as stagingCms from "../stagingCms.js";
+import type * as team from "../team.js";
 
 import type {
   ApiFromModules,
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   portal: typeof portal;
   qa: typeof qa;
   stagingCms: typeof stagingCms;
+  team: typeof team;
 }>;
 
 /**

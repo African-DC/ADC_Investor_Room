@@ -21,6 +21,8 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
  const bridge=getAuthBridge()
  if(!bridge||!adminAllowed())return null
  try{
+  // Pending invitations for this verified email become memberships before the MFA gate.
+  await bridge.fetchAuthMutation(api.team.claim,{}).catch(()=>null)
   const mfa=await bridge.fetchAuthQuery(api.mfa.status,{})
   if(!mfa)return null
   if(!mfa.verified)return {mfa} as const
