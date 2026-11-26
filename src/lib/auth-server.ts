@@ -12,10 +12,11 @@ export function getAuthBridge(){
  if(process.env.ADC_AUTH_ENABLED!=='true'||!convexUrl||!convexSiteUrl)return null
  const base=convexBetterAuthReactStart({convexUrl,convexSiteUrl})
  let token:Promise<string|undefined>|null=null
- const client=async()=>{token??=base.getToken().catch(()=>undefined);const t=await token;const c=new ConvexHttpClient(convexUrl);if(t)c.setAuth(t);return c}
+ const getToken=()=>token??=base.getToken();
+ const client=async()=>{const t=await getToken();const c=new ConvexHttpClient(convexUrl);if(t)c.setAuth(t);return c}
  return {
   handler:base.handler,
-  getToken:base.getToken,
+  getToken,
   fetchAuthQuery:async<Q extends FunctionReference<'query'>>(q:Q,args:FunctionArgs<Q>):Promise<FunctionReturnType<Q>>=>(await client()).query(q,args),
   fetchAuthMutation:async<M extends FunctionReference<'mutation'>>(m:M,args:FunctionArgs<M>):Promise<FunctionReturnType<M>>=>(await client()).mutation(m,args),
   fetchAuthAction:async<A extends FunctionReference<'action'>>(a:A,args:FunctionArgs<A>):Promise<FunctionReturnType<A>>=>(await client()).action(a,args),

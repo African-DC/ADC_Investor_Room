@@ -9,6 +9,8 @@ import { adminCommand } from '../features/admin/contracts'
 import { targetsFor,draftText } from '../features/technical/model'
 import { getTechnicalSnapshot } from '../server/githubReporting'
 import { AdminRoom } from '../features/admin/AdminRoom'
+import { JourneyFrame } from '../features/onboarding/JourneyFrame'
+import { useState } from 'react'
 import { MfaGate } from '../features/admin/MfaGate'
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 // Admin UI is allowed wherever the flag is on: every privileged Convex call enforces session-bound TOTP MFA.
@@ -21,18 +23,19 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
  const bridge=getAuthBridge()
  if(!bridge||!adminAllowed())return null
  try{
+  if(!await bridge.getToken())return {problem:'signin' as const}
   // Pending invitations for this verified email become memberships before the MFA gate.
-  await bridge.fetchAuthMutation(api.team.claim,{}).catch(()=>null)
+  await bridge.fetchAuthMutation(api.team.claim,{})
   const mfa=await bridge.fetchAuthQuery(api.mfa.status,{})
-  if(!mfa)return null
+  if(!mfa)return {problem:'membership' as const}
   if(!mfa.verified)return {mfa} as const
   const identity=await bridge.fetchAuthQuery(api.admin.rooms,{})
-  if(!identity)return null
+  if(!identity)return {problem:'membership' as const}
   const room=data.roomId?identity.rooms.find(r=>r.id===data.roomId):identity.rooms[0]
-  if(!room)return null
+  if(!room)return {problem:'membership' as const}
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
   const metrics=await safe(bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id}));const contacts=await safe(bridge.fetchAuthQuery(api.crm.list,{roomId:room.id}));const questions=await safe(bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id}));const analytics=await safe(bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30}));const access=await safe(bridge.fetchAuthQuery(api.access.overview,{roomId:room.id}));const team=await safe(bridge.fetchAuthQuery(api.team.list,{roomId:room.id}));const emails=await safe(bridge.fetchAuthQuery(api.outbox.list,{roomId:room.id}));const nda=await safe(bridge.fetchAuthQuery(api.nda.adminView,{roomId:room.id}));const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
- }catch{return null}
+ }catch{return {problem:'unavailable' as const}}
 })
 const command=createServerFn({method:'POST'}).validator(adminCommand).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
@@ -136,7 +139,17 @@ const uploadImage=createServerFn({method:'POST'}).validator(z.object({roomId:z.s
  const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())return null
  try{return await bridge.fetchAuthMutation(api.media.upload,{...data,roomId:data.roomId as Id<'rooms'>})}catch{return null}
 })
+const touch=createServerFn({method:'POST'}).handler(async()=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())throw Error('Unavailable')
+ return bridge.fetchAuthMutation(api.mfa.touch,{})
+})
+function AdminProblem({problem}:{problem:'signin'|'membership'|'unavailable'}){
+ const [lang,setLang]=useState<'fr'|'en'>('fr'),fr=lang==='fr'
+ const title=problem==='membership'?(fr?'Accès administrateur non attribué.':'Admin access not assigned.'):problem==='signin'?(fr?'Connexion requise.':'Sign-in required.'):(fr?'Connexion momentanément indisponible.':'Connection temporarily unavailable.')
+ return <JourneyFrame space="admin" lang={lang} setLang={setLang} tone="alert"><h1>{title}</h1><p role="alert" className="frame-lead">{problem==='membership'?(fr?'Vérifiez que votre invitation est active et correspond à votre adresse e-mail vérifiée. Contactez ADC si nécessaire.':'Check that your invitation is active and matches your verified email. Contact ADC if needed.'):problem==='signin'?(fr?'Connectez-vous par lien ou code e-mail, puis validez votre Authenticator.':'Sign in by email link or code, then verify your authenticator.'):(fr?'Votre session n’a pas été supprimée. Réessayez sans demander de nouveau lien.':'Your session has not been deleted. Retry without requesting a new link.')}</p><button className="primary journey-primary" onClick={()=>location.reload()}>{fr?'Réessayer':'Retry'}</button><a className="secondary journey-link" href="/connexion?next=/admin">{fr?'Se connecter avec une adresse e-mail':'Sign in with an email address'}</a></JourneyFrame>
+}
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/connexion',search:{next:'/admin'}});return {state}
 },component:Page})
-function Page(){const {state}=Route.useRouteContext();if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});return next&&!next.mfa?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
+function Page(){const {state}=Route.useRouteContext();if(state.problem)return <AdminProblem problem={state.problem}/>;if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} touch={()=>touch()} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});if(next?.problem==='unavailable')throw Error('Temporary refresh failure');return next&&!next.mfa&&!next.problem?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}

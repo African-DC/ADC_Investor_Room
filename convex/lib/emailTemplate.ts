@@ -42,3 +42,8 @@ ${o.en?`<p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#6b5d50">
  const text=[o.kicker,'',o.title,'',o.lead,o.cta?'\n'+o.cta.label+' : '+new URL(o.cta.path,siteUrl).toString():'',o.en?'\n'+o.en:'','',o.note??''].join('\n')
  return {html,text}
 }
+
+export function otpEmail(siteUrl:string,otp:string){
+ if(!/^\d{6}$/.test(otp))throw Error('Invalid code')
+ return {subject:'ADC Investor Room — Code de connexion / Sign-in code',...transactionalEmail(siteUrl,{kicker:'CONNEXION ADC · SIGN IN',title:'Votre code de connexion',lead:'Code : '+otp+' — valable 10 minutes, à usage unique. Ne le communiquez à personne.',en:'Your sign-in code is '+otp+'. Valid for 10 minutes, single use. Never share it.',note:'Si vous n’avez pas demandé ce code, ignorez cet e-mail. / If you did not request this code, ignore this email.'})}
+}
