@@ -31,7 +31,7 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   const room=data.roomId?identity.rooms.find(r=>r.id===data.roomId):identity.rooms[0]
   if(!room)return null
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
-  const metrics=await safe(bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id}));const contacts=await safe(bridge.fetchAuthQuery(api.crm.list,{roomId:room.id}));const questions=await safe(bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id}));const analytics=await safe(bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30}));const access=await safe(bridge.fetchAuthQuery(api.access.overview,{roomId:room.id}));const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
+  const metrics=await safe(bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id}));const contacts=await safe(bridge.fetchAuthQuery(api.crm.list,{roomId:room.id}));const questions=await safe(bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id}));const analytics=await safe(bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30}));const access=await safe(bridge.fetchAuthQuery(api.access.overview,{roomId:room.id}));const team=await safe(bridge.fetchAuthQuery(api.team.list,{roomId:room.id}));const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
  }catch{return null}
 })
 const command=createServerFn({method:'POST'}).validator(adminCommand).handler(async({data})=>{
@@ -59,6 +59,10 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
    case 'deleteGroup':await bridge.fetchAuthMutation(api.access.deleteGroup,{roomId,groupId:data.groupId as Id<'investorGroups'>});break
    case 'roomStatus':await bridge.fetchAuthMutation(api.access.setRoomStatus,{roomId,status:data.status});break
    case 'manualReview':await bridge.fetchAuthMutation(api.documents.attestManualReview,{roomId,documentId:data.documentId as Id<'documents'>,sha256:data.sha256,verdict:data.verdict});break
+   case 'teamInvite':await bridge.fetchAuthMutation(api.team.invite,{roomId,email:data.email,capabilities:data.capabilities});break
+   case 'teamSetCaps':await bridge.fetchAuthMutation(api.team.setCapabilities,{roomId,membershipId:data.membershipId as Id<'stagingAdminMemberships'>,capabilities:data.capabilities});break
+   case 'teamRevoke':await bridge.fetchAuthMutation(api.team.revokeMember,{roomId,membershipId:data.membershipId as Id<'stagingAdminMemberships'>});break
+   case 'teamRevokeInvite':await bridge.fetchAuthMutation(api.team.revokeInvite,{roomId,inviteId:data.inviteId as Id<'adminInvites'>});break
    case 'revokeLink':await bridge.fetchAuthMutation(api.access.revokeLink,{roomId,linkId:data.linkId as Id<'accessLinks'>});break
    case 'archive':await bridge.fetchAuthMutation(api.admin.archive,{roomId,sectionId:data.sectionId as Id<'sections'>});break
   }
