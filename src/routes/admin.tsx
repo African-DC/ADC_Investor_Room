@@ -16,7 +16,7 @@ import { MfaGate } from '../features/admin/MfaGate'
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 // Admin UI is allowed wherever the flag is on: every privileged Convex call enforces session-bound TOTP MFA.
 // A missing capability for one panel must not break the whole back office.
-async function safe<T>(p:Promise<T>):Promise<T|null>{try{return await p}catch{return null}}
+async function safe<T>(panel:string,enabled:boolean,load:()=>Promise<T>,unavailable:string[]):Promise<T|null>{if(!enabled)return null;try{return await load()}catch(error){unavailable.push(panel);console.warn('[adc:panel] unavailable',{panel,...safeAuthFailure(error)});return null}}
 const adminAllowed=()=>process.env.ADC_STAGING_ADMIN_UI==='true'
 const search=z.object({roomId:z.string().max(128).optional()})
 const load=createServerFn({method:'GET'}).validator(search).handler(async({data})=>{
@@ -46,9 +46,12 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   if(!room)return {problem:'membership' as const}
   stage='dashboard'
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
+  const unavailablePanels:string[]=[]
+  const has=(...caps:string[])=>caps.some(c=>(dashboard.capabilities as readonly string[]).includes(c))
+  const args={roomId:room.id}
   const [metrics,contacts,questions,analytics,access,team,emails,nda]=await Promise.all([
-   safe(bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.crm.list,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30})),safe(bridge.fetchAuthQuery(api.access.overview,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.team.list,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.outbox.list,{roomId:room.id})),safe(bridge.fetchAuthQuery(api.nda.adminView,{roomId:room.id}))
-  ]);const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
+   safe('finance',has('finance:edit','finance:review'),()=>bridge.fetchAuthQuery(api.finance.adminList,args),unavailablePanels),safe('crm',has('crm:read','crm:edit'),()=>bridge.fetchAuthQuery(api.crm.list,args),unavailablePanels),safe('qa',has('qa:read','qa:reply'),()=>bridge.fetchAuthQuery(api.qa.adminList,args),unavailablePanels),safe('analytics',has('analytics:read'),()=>bridge.fetchAuthQuery(api.analytics.dashboard,{...args,days:30}),unavailablePanels),safe('access',has('access:manage'),()=>bridge.fetchAuthQuery(api.access.overview,args),unavailablePanels),safe('team',has('access:manage'),()=>bridge.fetchAuthQuery(api.team.list,args),unavailablePanels),safe('emails',has('access:manage'),()=>bridge.fetchAuthQuery(api.outbox.list,args),unavailablePanels),safe('nda',has('access:manage'),()=>bridge.fetchAuthQuery(api.nda.adminView,args),unavailablePanels)
+  ]);const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,unavailablePanels:unavailablePanels.sort(),metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
  }catch(error){
   const failure=safeAuthFailure(error)
   console.warn('[adc:admin] load failed',{stage,...failure})

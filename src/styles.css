@@ -649,3 +649,5 @@ ul.bk-list{list-style:disc}ol.bk-list{list-style:decimal}.bk-list li{padding-lef
 }
 @media(max-width:760px){.journey-stage{align-self:center;padding:16px 0 20px}.journey-footer{row-gap:5px}}
 .login-methods{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 6px}.login-methods button{border:1px solid #dccfc1;background:#fff;padding:10px;border-radius:10px;color:#1a0f06;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:7px}.login-methods button[aria-pressed=true]{border-color:#c2410c;background:#fff3e9;color:#a33a0d}.session-warning{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff2d9;border:1px solid #e7cc9c;padding:10px 14px;color:#67430a;font-size:13px;margin:0 0 12px;border-radius:10px}
+
+.adc-panel-unavailable{display:grid;justify-items:start;gap:12px;padding:24px}.adc-panel-unavailable>svg{color:#b45309}.adc-panel-unavailable p{margin:0;color:var(--muted,#695e54);line-height:1.6}.session-warning>span{min-width:0;flex:1}.session-warning{flex-wrap:wrap}
