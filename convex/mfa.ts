@@ -133,8 +133,17 @@ export async function setOwnIdle(ctx:MutationCtx,userId:string,minutes:number){
  if(!Number.isInteger(minutes)||minutes<15||minutes>idleMs()/60000)return false
  const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',userId)).unique()
  if(mfa?.status!=='active')return false
+ // Persist a reduced deadline, so raising the preference later cannot resurrect an expired proof.
+ const proofs=await ctx.db.query('adminMfaProofs').withIndex('by_user',q=>q.eq('authUserId',userId)).take(101)
+ if(proofs.length>100)return false
+ const now=Date.now(),priorIdle=effectiveIdleMs(mfa),nextIdle=minutes*60000
+ for(const proof of proofs){
+  const expiresAt=Math.min(proof.expiresAt,(proof.lastActivityAt??proof.verifiedAt)+priorIdle,(proof.lastActivityAt??proof.verifiedAt)+nextIdle,proof.verifiedAt+ABSOLUTE_TTL)
+  if(expiresAt<=now)await ctx.db.delete(proof._id)
+  else if(expiresAt<proof.expiresAt)await ctx.db.patch(proof._id,{expiresAt})
+ }
  await ctx.db.patch(mfa._id,{idleMinutes:minutes})
- await ctx.db.insert('auditLogs',{actorId:userId,event:'admin.mfa.idle_changed',at:Date.now()})
+ await ctx.db.insert('auditLogs',{actorId:userId,event:'admin.mfa.idle_changed',at:now})
  return true
 }
 export const setIdle=mutation({args:{minutes:v.number()},returns:v.object({ok:v.boolean()}),handler:async(ctx,a)=>{

@@ -68,3 +68,18 @@ it('security snapshot is personal, revocation cannot target another account or c
   await expect(check(t,'s1')).rejects.toThrow('MFA required')
  }finally{vi.unstubAllEnvs()}
 })
+
+it('raising a personal inactivity preference does not resurrect a previously expired proof',async()=>{
+ vi.stubEnv('ADC_ADMIN_IDLE_MINUTES','120')
+ try{
+  const t=await setup()
+  await t.mutation(internal.mfa.recordAttempt,{userId:U,sessionId:'s1',step:100,activate:['h1']})
+  await t.mutation(internal.mfa.recordAttempt,{userId:U,sessionId:'s2',step:101})
+  await t.run(async ctx=>{const proof=await ctx.db.query('adminMfaProofs').withIndex('by_session',q=>q.eq('sessionId','s2')).unique();if(!proof)throw Error('Fixture');await ctx.db.patch(proof._id,{lastActivityAt:Date.now()-31*60000})})
+  expect(await t.run(ctx=>setOwnIdle(ctx,U,30))).toBe(true)
+  await expect(check(t,'s2')).rejects.toThrow('MFA required')
+  expect(await t.run(ctx=>setOwnIdle(ctx,U,120))).toBe(true)
+  await expect(check(t,'s2')).rejects.toThrow('MFA required')
+  await expect(check(t,'s1')).resolves.toBeNull()
+ }finally{vi.unstubAllEnvs()}
+})
