@@ -15,6 +15,8 @@ import { DocumentsPanel } from './DocumentsPanel'
 import { TeamPanel } from './TeamPanel'
 import { EmailLog } from './EmailLog'
 import { NdaPanel } from './NdaPanel'
+import { SecurityPanel } from './SecurityPanel'
+import type { SecurityData,SecurityAction } from './SecurityPanel'
 import type { NdaState } from './NdaPanel'
 import { LayoutDashboard,PanelsTopLeft,FolderLock,KeyRound,Contact2,MessagesSquare,Landmark,BarChart3,GitBranch,ShieldCheck,ShieldAlert,LogOut,Menu,Search,Eye,FileText,FileClock,Globe2,UserPlus,Users,Link2,ChevronRight,CheckCircle2,PenLine,UsersRound,Mails,FileSignature } from 'lucide-react'
 import { Dialog,DialogBackdrop,DialogContent,DialogShortcut,DialogTitle,DialogTrigger } from '@ui-sdk/react/dialog'
@@ -30,7 +32,7 @@ type Applicant={id:string;name:string;email:string;organization:string;grants:Gr
 type Section={id:string;slug:string;category:string;order:number;published:boolean;latest:{id:string;number:number;state:string;titleFr:string;titleEn:string;bodyFr:string;bodyEn:string;source:string;own:boolean}|null}
 type DocumentItem={id:string;titleFr:string;titleEn:string;category:string;status:string;version:{id:string;number:number;scanStatus:string;scanMethod?:string|null;sha256?:string;sizeBytes:number;own:boolean}|null}
 type State={identity:{name:string;rooms:{id:string;name:string}[]};dashboard:{unavailablePanels?:string[];room:{id:string;name:string;status:string};capabilities:string[];applicants:Applicant[];sections:Section[];documents:DocumentItem[];metrics:AdminMetric[];uploadEnabled:boolean;manualScan?:boolean;nda?:NdaState|null;emails?:{id:string;kind:string;to:string;subject:string;status:string;attempts:number;lastError:string|null;createdAt:number;sentAt:number|null}[]|null;team?:{members:{id:string;name:string;email:string;capabilities:string[];revoked:boolean;self:boolean}[];invites:{id:string;email:string;capabilities:string[];createdAt:number;expiresAt:number;status:string}[]}|null;images?:Record<string,{src:string;width:number;height:number}>;contacts:Contact[];questions:Question[];analytics:AnalyticsResult|null;technicalTargets:{key:string;label:string}[];access:{groups:{id:string;name:string;profileIds:string[]}[];links:{id:string;label:string;targets:{capability:string;resourceId?:string}[];email:string|null;startsAt:number;expiresAt:number;grantUntil:number|null;maxUses:number;uses:number;active:boolean;revoked:boolean}[]}|null}}
-export function AdminRoom({initial,reload,touch,command,history,questionRead,technical,createLink,reviewUrl,uploadImage}:{initial:State;touch:()=>Promise<{ok:boolean}>;reload:()=>Promise<State|null>;command:(data:AdminCommand)=>Promise<{ok:boolean}>;history:(id:string)=>Promise<HistoryEvent[]|null>;questionRead:(id:string)=>Promise<Thread|null>;technical:(key:string,draft:boolean)=>Promise<TechnicalResult|null>;createLink:Parameters<typeof AccessManager>[0]['createLink'];reviewUrl:(documentId:string)=>Promise<string|null>;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
+export function AdminRoom({initial,reload,touch,command,history,questionRead,technical,createLink,reviewUrl,uploadImage,securityRead,securityChange}:{initial:State;securityRead?:()=>Promise<SecurityData|null>;securityChange?:(data:SecurityAction)=>Promise<{ok:boolean}>;touch:()=>Promise<{ok:boolean}>;reload:()=>Promise<State|null>;command:(data:AdminCommand)=>Promise<{ok:boolean}>;history:(id:string)=>Promise<HistoryEvent[]|null>;questionRead:(id:string)=>Promise<Thread|null>;technical:(key:string,draft:boolean)=>Promise<TechnicalResult|null>;createLink:Parameters<typeof AccessManager>[0]['createLink'];reviewUrl:(documentId:string)=>Promise<string|null>;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
  const [data,setData]=useState<State|null>(initial),[busy,setBusy]=useState(false),[view,setView]=useState('dashboard'),[menu,setMenu]=useState(false),[palette,setPalette]=useState(false)
  const seq=useRef(0),lastTouch=useRef(0),touching=useRef(false),lastVerified=useRef(Date.now())
  const [connectionWarning,setConnectionWarning]=useState(false)
@@ -51,6 +53,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
  type View={key:string;label:string;icon:typeof LayoutDashboard;group:string;show:boolean;badge?:number;desc:string}
  const views:View[]=[
   {key:'dashboard',label:'Tableau de bord',icon:LayoutDashboard,group:'Pilotage',show:true,desc:'Vue d’ensemble de la salle et des actions à traiter.'},
+  {key:'security',label:'Centre de sécurité',icon:ShieldCheck,group:'Pilotage',show:!!securityRead&&!!securityChange,desc:'Vérifications MFA, politique personnelle et historique de sécurité.'},
   {key:'team',label:'Équipe ADC',icon:UsersRound,group:'Pilotage',show:has('access:manage'),badge:(d.team?.invites??[]).filter(i=>i.status==='pending').length,desc:'Administrateurs, rôles et invitations. Aucun auto-enrôlement.'},
   {key:'pages',label:'Pages',icon:PanelsTopLeft,group:'Contenu',show:has('content:edit')||has('content:review'),badge:review.length,desc:'Rédigez, relisez et publiez les pages de la salle, bloc par bloc.'},
   {key:'nda',label:'Accord de confidentialité',icon:FileSignature,group:'Contenu',show:has('access:manage'),desc:'NDA versionné : rédaction FR/EN, publication, suivi des acceptations.'},
@@ -119,6 +122,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
        {(has('content:edit')||has('content:review'))&&<button onClick={()=>go('documents')}><FolderLock size={18}/><span><b>Documents</b><small>Bibliothèque privée</small></span></button>}
       </div></section>
      </div></div>}
+    {current.key==='security'&&securityRead&&securityChange&&<SecurityPanel read={securityRead} change={securityChange}/>}
     {current.key==='team'&&!panelUnavailable&&<TeamPanel roomId={roomId} members={d.team?.members??[]} invites={d.team?.invites??[]} myCaps={d.capabilities} busy={busy} run={run}/>}
     {current.key==='emails'&&!panelUnavailable&&<EmailLog roomId={roomId} rows={d.emails??[]} busy={busy} run={run}/>}
     {current.key==='nda'&&!panelUnavailable&&<NdaPanel roomId={roomId} nda={d.nda??null} canPublish={has('content:review')} busy={busy} run={run}/>}

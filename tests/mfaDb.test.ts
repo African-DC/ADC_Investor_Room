@@ -1,9 +1,9 @@
 // @vitest-environment edge-runtime
-import {expect,it} from 'vitest'
+import {expect,it,vi} from 'vitest'
 import {convexTest} from 'convex-test'
 import schema from '../convex/schema'
 import {internal} from '../convex/_generated/api'
-import {requireMfa} from '../convex/mfa'
+import {requireMfa,securitySnapshot,revokeOwnProof,setOwnIdle} from '../convex/mfa'
 const modules=import.meta.glob(['../convex/**/*.*s','!../convex/**/*.test.ts'])
 const U='user_admin'
 async function setup(){
@@ -45,4 +45,26 @@ it('idle expiry is server enforced even with an unexpired legacy proof; activity
  await t.mutation(internal.mfa.recordAttempt,{userId:U,sessionId:'s1',step:100,activate:['h1']})
  await t.run(async ctx=>{const p=await ctx.db.query('adminMfaProofs').withIndex('by_session',q=>q.eq('sessionId','s1')).unique();if(!p)throw Error('missing proof');await ctx.db.patch(p._id,{lastActivityAt:Date.now()-9*3600_000,expiresAt:Date.now()+3600_000})})
  await expect(check(t,'s1')).rejects.toThrow('MFA required')
+})
+
+it('security snapshot is personal, revocation cannot target another account or current proof, preference cannot weaken policy',async()=>{
+ vi.stubEnv('ADC_ADMIN_IDLE_MINUTES','120')
+ try{
+  const t=await setup()
+  await t.mutation(internal.mfa.recordAttempt,{userId:U,sessionId:'s1',step:100,activate:['h1']})
+  await t.mutation(internal.mfa.recordAttempt,{userId:U,sessionId:'s2',step:101})
+  const other=await t.run(ctx=>ctx.db.insert('adminMfaProofs',{authUserId:'other',sessionId:'foreign',verifiedAt:Date.now(),expiresAt:Date.now()+600000,method:'totp'}))
+  await t.run(ctx=>ctx.db.insert('auditLogs',{actorId:'other',event:'admin.mfa.failed',resourceId:'secret-other',at:Date.now()}))
+  const snap=await t.run(ctx=>securitySnapshot(ctx,U,'s1',Date.now()))
+  expect(snap.proofs).toHaveLength(2);expect(snap.events.every(e=>!('resourceId' in e))).toBe(true);expect(JSON.stringify(snap)).not.toContain('foreign')
+  const current=snap.proofs.find(p=>p.current)!,another=snap.proofs.find(p=>!p.current)!
+  expect(await t.run(ctx=>revokeOwnProof(ctx,U,'s1',other))).toBe(false)
+  expect(await t.run(ctx=>revokeOwnProof(ctx,U,'s1',current.id))).toBe(false)
+  expect(await t.run(ctx=>revokeOwnProof(ctx,U,'s1',another.id))).toBe(true)
+  await expect(check(t,'s2')).rejects.toThrow('MFA required')
+  expect(await t.run(ctx=>setOwnIdle(ctx,U,121))).toBe(false)
+  expect(await t.run(ctx=>setOwnIdle(ctx,U,30))).toBe(true)
+  await t.run(ctx=>ctx.db.patch(current.id,{lastActivityAt:Date.now()-31*60000}))
+  await expect(check(t,'s1')).rejects.toThrow('MFA required')
+ }finally{vi.unstubAllEnvs()}
 })

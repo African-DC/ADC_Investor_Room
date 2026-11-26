@@ -10,6 +10,7 @@ import { adminCommand } from '../features/admin/contracts'
 import { targetsFor,draftText } from '../features/technical/model'
 import { getTechnicalSnapshot } from '../server/githubReporting'
 import { AdminRoom } from '../features/admin/AdminRoom'
+import type { SecurityAction } from '../features/admin/SecurityPanel'
 import { JourneyFrame } from '../features/onboarding/JourneyFrame'
 import { useState } from 'react'
 import { MfaGate } from '../features/admin/MfaGate'
@@ -168,6 +169,16 @@ const touch=createServerFn({method:'POST'}).handler(async()=>{
  const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())throw Error('Unavailable')
  return bridge.fetchAuthMutation(api.mfa.touch,{})
 })
+const securityRead=createServerFn({method:'GET'}).handler(async()=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge();if(!bridge||!adminAllowed())return null
+ return bridge.fetchAuthQuery(api.mfa.securityCenter,{})
+})
+const securityChange=createServerFn({method:'POST'}).validator(z.discriminatedUnion('kind',[z.object({kind:z.literal('idle'),minutes:z.number().int().min(15).max(480)}),z.object({kind:z.literal('revoke'),proofId:z.string().max(128)})])).handler(async({data})=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())return {ok:false}
+ try{return data.kind==='idle'?await bridge.fetchAuthMutation(api.mfa.setIdle,{minutes:data.minutes}):await bridge.fetchAuthMutation(api.mfa.revokeProof,{proofId:data.proofId as Id<'adminMfaProofs'>})}catch{return {ok:false}}
+})
 function AdminProblem({problem}:{problem:'signin'|'membership'|'unavailable'}){
  const [lang,setLang]=useState<'fr'|'en'>('fr'),fr=lang==='fr'
  const title=problem==='membership'?(fr?'Accès administrateur non attribué.':'Admin access not assigned.'):problem==='signin'?(fr?'Connexion requise.':'Sign-in required.'):(fr?'Connexion momentanément indisponible.':'Connection temporarily unavailable.')
@@ -176,4 +187,4 @@ function AdminProblem({problem}:{problem:'signin'|'membership'|'unavailable'}){
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/connexion',search:{next:'/admin'}});return {state}
 },component:Page})
-function Page(){const {state}=Route.useRouteContext();if(state.problem)return <AdminProblem problem={state.problem}/>;if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} touch={()=>touch()} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});if(next?.problem==='unavailable')throw Error('Temporary refresh failure');return next&&!next.mfa&&!next.problem?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
+function Page(){const {state}=Route.useRouteContext();if(state.problem)return <AdminProblem problem={state.problem}/>;if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom securityRead={()=>securityRead()} securityChange={(data:SecurityAction)=>securityChange({data})} uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} touch={()=>touch()} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});if(next?.problem==='unavailable')throw Error('Temporary refresh failure');return next&&!next.mfa&&!next.problem?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}

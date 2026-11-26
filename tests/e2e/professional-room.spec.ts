@@ -25,3 +25,12 @@ test('failed admin invitation preserves the email',async({page})=>{
  await expect(page.getByText('Action refusée',{exact:true})).toBeVisible()
  await expect(email).toHaveValue('new-admin@example.com')
 })
+
+test('security center exposes policy without session tokens',async({page})=>{
+ await page.goto('/dev-preview?state=admin#security')
+ await expect(page.getByRole('heading',{name:'Centre de sécurité',exact:true})).toBeVisible()
+ await expect(page.getByText('Cette session',{exact:true})).toBeVisible()
+ await expect(page.getByLabel('Inactivité maximale (minutes)')).toHaveValue('120')
+ await page.getByLabel('Inactivité maximale (minutes)').fill('30')
+ await expect(page.getByRole('button',{name:'Enregistrer',exact:true})).toBeEnabled()
+})
