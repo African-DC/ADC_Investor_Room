@@ -30,7 +30,9 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
  // Recheck authorization periodically and on window focus. Clear the rendered content on failure.
  useEffect(()=>{
   let alive=true
-  async function load(){const token=++sequence.current;try{const next=await refresh(roomId);if(alive&&token===sequence.current)setData(next)}catch{if(alive&&token===sequence.current)setData(null)}}
+  let misses=0
+  // Access is re-checked often; a transient failure must not wipe the page, but a confirmed loss of access must.
+  async function load(){const token=++sequence.current;try{const next=await refresh(roomId);if(!alive||token!==sequence.current)return;if(next){misses=0;setData(next)}else if(++misses>=2)setData(null);else window.setTimeout(()=>void load(),2500)}catch{/* keep view; retried on next tick */}}
   const timer=window.setInterval(()=>void load(),30000)
   const focus=()=>void load()
   window.addEventListener('focus',focus)

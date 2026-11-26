@@ -620,3 +620,5 @@ ul.bk-list{list-style:disc}ol.bk-list{list-style:decimal}.bk-list li{padding-lef
 .tm-actions{display:flex;gap:6px;align-items:center}.tm-sub{margin-top:8px!important}
 .tm-actions .dr-btn{height:34px;padding:0 12px}
 .el-err{color:#9f3030!important;max-width:260px;white-space:normal}
+.am-presets{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}.am-presets .am-label{grid-column:1/-1;margin:0}
+.am-presets button{display:grid;gap:2px;text-align:left;padding:10px 12px;border:1px solid #ece4da;border-radius:12px;background:#fbf7f2;color:#1a0f06;transition:border-color .2s,background .2s}.am-presets button:hover{border-color:#e8590c;background:#fff}.am-presets b{font-size:13px}.am-presets small{font-size:11px;color:#6b5d50;line-height:1.4}

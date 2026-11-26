@@ -14,7 +14,7 @@ export const createAuth=(ctx:GenericCtx<DataModel>)=>{
  return betterAuth({
   baseURL:siteUrl,secret:required('BETTER_AUTH_SECRET'),database:authComponent.adapter(ctx),
   trustedOrigins:[siteUrl],emailAndPassword:{enabled:false},
-  rateLimit:{enabled:true,storage:'database',window:60,max:20},
+  rateLimit:{enabled:true,storage:'database',window:60,max:20,customRules:{'/convex/token':{window:60,max:240},'/get-session':{window:60,max:240}}},
   session:{expiresIn:60*60*24,updateAge:60*60},
   plugins:[magicLink({expiresIn:900,storeToken:'hashed',rateLimit:{window:60,max:3},
    sendMagicLink:async({email,url})=>{
