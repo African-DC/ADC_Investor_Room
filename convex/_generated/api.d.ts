@@ -26,6 +26,7 @@ import type * as lib_roomPolicy from "../lib/roomPolicy.js";
 import type * as lib_totp from "../lib/totp.js";
 import type * as media from "../media.js";
 import type * as mfa from "../mfa.js";
+import type * as nda from "../nda.js";
 import type * as outbox from "../outbox.js";
 import type * as portal from "../portal.js";
 import type * as qa from "../qa.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   "lib/totp": typeof lib_totp;
   media: typeof media;
   mfa: typeof mfa;
+  nda: typeof nda;
   outbox: typeof outbox;
   portal: typeof portal;
   qa: typeof qa;

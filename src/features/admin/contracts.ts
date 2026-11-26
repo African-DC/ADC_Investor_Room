@@ -28,6 +28,8 @@ export const adminCommand=z.discriminatedUnion('kind',[
  base.extend({kind:z.literal('teamRevoke'),membershipId:id}),
  base.extend({kind:z.literal('teamRevokeInvite'),inviteId:id}),
  base.extend({kind:z.literal('retryEmail'),emailId:id}),
+ base.extend({kind:z.literal('ndaPublish'),textFr:z.string().trim().min(1).max(40000),textEn:z.string().trim().min(1).max(40000)}),
+ base.extend({kind:z.literal('ndaRemove')}),
  base.extend({kind:z.literal('manualReview'),documentId:id,sha256:z.string().regex(/^[a-f0-9]{64}$/),verdict:z.enum(['clean','rejected'])}),
 ])
 export type AdminCommand=z.infer<typeof adminCommand>

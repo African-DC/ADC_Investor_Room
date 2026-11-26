@@ -622,3 +622,6 @@ ul.bk-list{list-style:disc}ol.bk-list{list-style:decimal}.bk-list li{padding-lef
 .el-err{color:#9f3030!important;max-width:260px;white-space:normal}
 .am-presets{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}.am-presets .am-label{grid-column:1/-1;margin:0}
 .am-presets button{display:grid;gap:2px;text-align:left;padding:10px 12px;border:1px solid #ece4da;border-radius:12px;background:#fbf7f2;color:#1a0f06;transition:border-color .2s,background .2s}.am-presets button:hover{border-color:#e8590c;background:#fff}.am-presets b{font-size:13px}.am-presets small{font-size:11px;color:#6b5d50;line-height:1.4}
+.nda-edit{width:100%;min-height:320px;border:1px solid #dccfc1;border-radius:12px;padding:14px;font:15px/1.7 Georgia,serif;color:#1a0f06;resize:vertical;background:#fff}.nda-edit:focus{outline:none;border-color:#e8590c;box-shadow:0 0 0 3px #e8590c1c}
+.nda-hist{list-style:none;margin:0;padding:0;display:grid;gap:6px}.nda-hist li{display:grid;padding:10px 12px;border:1px solid #f0e9e1;border-radius:10px}.nda-hist b{font-size:13px}.nda-hist span{font-size:12px;color:#6b5d50}
+.am-badge svg{vertical-align:-2px}
