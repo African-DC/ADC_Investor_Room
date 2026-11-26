@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect,useState } from 'react'
 import type { FormEvent } from 'react'
 import { ArrowRight,Mail,MailCheck,KeyRound } from 'lucide-react'
 import { authClient } from '../lib/auth-client'
@@ -17,8 +17,10 @@ function SignIn(){
  const {next}=Route.useSearch()
  const [lang,setLang]=useState<Lang>('fr'),t=copy[lang],fr=lang==='fr'
  const [email,setEmail]=useState(''),[otp,setOtp]=useState(''),[method,setMethod]=useState<'link'|'otp'>('link'),[state,setState]=useState<'idle'|'sending'|'sent'|'error'|'invalid'>('idle'),[verifying,setVerifying]=useState(false),[codeError,setCodeError]=useState(false),[sentAt,setSentAt]=useState(0),[resendWait,setResendWait]=useState(false)
+ const [ready,setReady]=useState(false)
+ useEffect(()=>setReady(true),[])
  const space=next==='/admin'?'admin':'investor'
- async function submit(e?:FormEvent){e?.preventDefault();if(state==='sending'||verifying)return;const v=email.trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)){setState('invalid');return}
+ async function submit(e?:FormEvent){e?.preventDefault();if(!ready||state==='sending'||verifying)return;const v=email.trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)){setState('invalid');return}
   setState('sending');setCodeError(false);setOtp('');setResendWait(false);try{
    const r=method==='link'?await authClient.signIn.magicLink({email:v,callbackURL:next,newUserCallbackURL:next,errorCallbackURL:'/connexion?next='+encodeURIComponent(next)}):await authClient.emailOtp.sendVerificationOtp({email:v,type:'sign-in'})
    if(r.error)throw Error('failed');setSentAt(Date.now());setState('sent')
@@ -33,10 +35,10 @@ function SignIn(){
   <button className="secondary journey-link frame-back" disabled={verifying} onClick={()=>{setState('idle');setCodeError(false);setOtp('')}}>{t.again} / {fr?'Changer de méthode':'Change method'}</button></JourneyFrame>
  return <JourneyFrame space={space} lang={lang} setLang={setLang}>
   <div className="frame-emblem"><Mail size={30}/></div><p className="journey-kicker">{next==='/admin'?t.admin:t.kicker}</p><h1>{t.title}</h1><p className="frame-lead">{fr?'Choisissez votre méthode de connexion sécurisée. Aucun mot de passe.':'Choose your secure sign-in method. No password.'}</p>
-  <div className="login-methods" role="group" aria-label={fr?'Méthode de connexion':'Sign-in method'}><button type="button" disabled={state==='sending'} aria-pressed={method==='link'} onClick={()=>{setMethod('link');setState('idle')}}><Mail size={16}/>{fr?'Lien par e-mail':'Email link'}</button><button type="button" disabled={state==='sending'} aria-pressed={method==='otp'} onClick={()=>{setMethod('otp');setState('idle')}}><KeyRound size={16}/>{fr?'Code OTP':'Email code'}</button></div>
-  <form className="mfa-form" onSubmit={submit} noValidate><label className="field"><span>{t.email}</span><input className="am-search login-input" type="email" autoComplete="email" inputMode="email" autoFocus disabled={state==='sending'} value={email} aria-invalid={state==='invalid'} onChange={e=>{setEmail(e.target.value);if(state!=='sending')setState('idle')}} placeholder="nom@entreprise.com"/></label>
+  <div className="login-methods" role="group" aria-label={fr?'Méthode de connexion':'Sign-in method'}><button type="button" disabled={!ready||state==='sending'} aria-pressed={method==='link'} onClick={()=>{setMethod('link');setState('idle')}}><Mail size={16}/>{fr?'Lien par e-mail':'Email link'}</button><button type="button" disabled={!ready||state==='sending'} aria-pressed={method==='otp'} onClick={()=>{setMethod('otp');setState('idle')}}><KeyRound size={16}/>{fr?'Code OTP':'Email code'}</button></div>
+  <form className="mfa-form" onSubmit={submit} noValidate><label className="field"><span>{t.email}</span><input className="am-search login-input" type="email" autoComplete="email" inputMode="email" autoFocus disabled={!ready||state==='sending'} value={email} aria-invalid={state==='invalid'} onChange={e=>{setEmail(e.target.value);if(state!=='sending')setState('idle')}} placeholder="nom@entreprise.com"/></label>
    {state==='invalid'&&<p role="alert" className="frame-status error">{t.invalid}</p>}{state==='error'&&<p role="alert" className="frame-status error">{t.error}</p>}
-   <button className="primary journey-primary" disabled={state==='sending'}>{state==='sending'?t.sending:method==='link'?t.send:fr?'Recevoir mon code':'Send my code'}<ArrowRight size={19}/></button></form>
+   <button className="primary journey-primary" disabled={!ready||state==='sending'}>{state==='sending'?t.sending:method==='link'?t.send:fr?'Recevoir mon code':'Send my code'}<ArrowRight size={19}/></button></form>
   {next==='/admin'?<p className="frame-note">{fr?'Après vérification de votre adresse, votre application Authenticator reste obligatoire.':'After email verification, your authenticator app is still required.'}</p>:<a className="secondary journey-link frame-back" href="/">{t.new}</a>}
  </JourneyFrame>
 }
