@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { kinds } from '../finance/registry'
-import { stages } from '../crm/model'
+import { stages,MAX_XOF } from '../crm/model'
 const id=z.string().min(1).max(128)
 const base=z.object({roomId:id})
 export const adminCommand=z.discriminatedUnion('kind',[
@@ -9,7 +9,8 @@ export const adminCommand=z.discriminatedUnion('kind',[
  base.extend({kind:z.literal('financeDraft'),sectionId:id,metricKind:z.enum(kinds),scope:z.string().trim().min(1).max(120),periodStart:z.string().max(10),periodEnd:z.string().max(10),definitionFr:z.string().trim().min(1).max(2000),definitionEn:z.string().trim().min(1).max(2000),value:z.number().int().safe(),unit:z.enum(['XOF','count']),evidenceVersionIds:z.array(id).min(1).max(10)}),
  base.extend({kind:z.literal('financeTransition'),metricId:id,action:z.enum(['submit','publish','archive'])}),
  base.extend({kind:z.literal('documentTransition'),documentId:id,action:z.enum(['publish','archive'])}),
- base.extend({kind:z.literal('crmUpdate'),profileId:id,stage:z.enum(stages),nextAction:z.string().max(500),dueDate:z.string().max(10).optional(),assignToMe:z.boolean(),expectedRevision:z.number().int().nonnegative()}),
+ base.extend({kind:z.literal('crmUpdate'),profileId:id,stage:z.enum(stages),nextAction:z.string().max(500),dueDate:z.string().max(10).optional(),assignToMe:z.boolean(),ownerMembershipId:id.nullable().optional(),expectedXof:z.number().int().min(0).max(MAX_XOF).nullable().optional(),committedXof:z.number().int().min(0).max(MAX_XOF).nullable().optional(),expectedRevision:z.number().int().nonnegative()}),
+ base.extend({kind:z.literal('crmTarget'),targetXof:z.number().int().min(1).max(MAX_XOF).nullable(),expectedTarget:z.number().int().min(1).max(MAX_XOF).nullable()}),
  base.extend({kind:z.literal('crmNote'),profileId:id,text:z.string().trim().min(1).max(4000)}),
  base.extend({kind:z.literal('qaReply'),questionId:id,body:z.string().trim().min(1).max(4000)}),
  base.extend({kind:z.literal('qaClose'),questionId:id}),
