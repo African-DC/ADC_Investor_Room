@@ -11,7 +11,7 @@ import { targetsFor,draftText } from '../features/technical/model'
 import { getTechnicalSnapshot } from '../server/githubReporting'
 import { AdminRoom } from '../features/admin/AdminRoom'
 import { JourneyFrame } from '../features/onboarding/JourneyFrame'
-import { useState } from 'react'
+import { useEffect,useState } from 'react'
 import { MfaGate } from '../features/admin/MfaGate'
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 // Admin UI is allowed wherever the flag is on: every privileged Convex call enforces session-bound TOTP MFA.
@@ -32,10 +32,8 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   // For new members, claiming is still mandatory and remains verified-email gated.
   if(!mfa||!data.roomId){
    stage='invitation-claim'
-   try{await bridge.fetchAuthMutation(api.team.claim,{})}
-   catch(error){if(!mfa)throw error;console.warn('[adc:admin] invitation claim deferred',safeAuthFailure(error))}
-   stage='mfa-status'
-   mfa=await bridge.fetchAuthQuery(api.mfa.status,{})
+   try{await bridge.fetchAuthMutation(api.team.claim,{});if(!mfa){stage='mfa-status';mfa=await bridge.fetchAuthQuery(api.mfa.status,{})}}
+   catch(error){if(!mfa)throw error;const failure=safeAuthFailure(error);console.warn('[adc:admin] invitation claim deferred',failure);if(failure.kind==='rate-limit')throw error}
   }
   if(!mfa)return {problem:'membership' as const}
   if(!mfa.verified)return {mfa} as const
@@ -50,6 +48,7 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
  }catch(error){
   const failure=safeAuthFailure(error)
   console.warn('[adc:admin] load failed',{stage,...failure})
+  if(failure.kind==='rate-limit')return {problem:'throttled' as const}
   if(failure.kind==='mfa-required'){
    try{const mfa=await bridge.fetchAuthQuery(api.mfa.status,{});if(mfa&&!mfa.verified)return {mfa} as const}catch{/* remain fail-closed */}
   }
@@ -163,12 +162,14 @@ const touch=createServerFn({method:'POST'}).handler(async()=>{
  const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())throw Error('Unavailable')
  return bridge.fetchAuthMutation(api.mfa.touch,{})
 })
-function AdminProblem({problem}:{problem:'signin'|'membership'|'unavailable'}){
+function AdminProblem({problem}:{problem:'signin'|'membership'|'unavailable'|'throttled'}){
  const [lang,setLang]=useState<'fr'|'en'>('fr'),fr=lang==='fr'
- const title=problem==='membership'?(fr?'Accès administrateur non attribué.':'Admin access not assigned.'):problem==='signin'?(fr?'Connexion requise.':'Sign-in required.'):(fr?'Connexion momentanément indisponible.':'Connection temporarily unavailable.')
- return <JourneyFrame space="admin" lang={lang} setLang={setLang} tone="alert"><h1>{title}</h1><p role="alert" className="frame-lead">{problem==='membership'?(fr?'Vérifiez que votre invitation est active et correspond à votre adresse e-mail vérifiée. Contactez ADC si nécessaire.':'Check that your invitation is active and matches your verified email. Contact ADC if needed.'):problem==='signin'?(fr?'Connectez-vous par lien ou code e-mail, puis validez votre Authenticator.':'Sign in by email link or code, then verify your authenticator.'):(fr?'Impossible de vérifier votre accès pour le moment. Réessayez ; si le problème persiste, reconnectez-vous par e-mail.':'Your access could not be verified. Retry; if the problem persists, sign in by email again.')}</p><button className="primary journey-primary" onClick={()=>location.reload()}>{fr?'Réessayer':'Retry'}</button><a className="secondary journey-link" href="/connexion?next=/admin">{fr?'Se connecter avec une adresse e-mail':'Sign in with an email address'}</a></JourneyFrame>
+ const [remaining,setRemaining]=useState(problem==='throttled'?60:0)
+ useEffect(()=>{if(problem!=='throttled')return;const until=Date.now()+60000;const timer=window.setInterval(()=>setRemaining(Math.max(0,Math.ceil((until-Date.now())/1000))),1000);return()=>window.clearInterval(timer)},[problem])
+ const title=problem==='throttled'?(fr?'Vérification temporairement limitée.':'Verification temporarily limited.'):problem==='membership'?(fr?'Accès administrateur non attribué.':'Admin access not assigned.'):problem==='signin'?(fr?'Connexion requise.':'Sign-in required.'):(fr?'Connexion momentanément indisponible.':'Connection temporarily unavailable.')
+ return <JourneyFrame space="admin" lang={lang} setLang={setLang} tone="alert"><h1>{title}</h1><p role="alert" className="frame-lead">{problem==='throttled'?(fr?'Le serveur limite temporairement les requêtes. Inutile de redemander un lien de connexion.':'The server is temporarily limiting requests. No need to request another sign-in link.'):problem==='membership'?(fr?'Vérifiez que votre invitation est active et correspond à votre adresse e-mail vérifiée. Contactez ADC si nécessaire.':'Check that your invitation is active and matches your verified email. Contact ADC if needed.'):problem==='signin'?(fr?'Connectez-vous par lien ou code e-mail, puis validez votre Authenticator.':'Sign in by email link or code, then verify your authenticator.'):(fr?'Impossible de vérifier votre accès pour le moment. Réessayez ; si le problème persiste, reconnectez-vous par e-mail.':'Your access could not be verified. Retry; if the problem persists, sign in by email again.')}</p><button className="primary journey-primary" disabled={remaining>0} onClick={()=>location.reload()}>{remaining>0?(fr?'Réessayer dans ':'Retry in ')+remaining+' s':fr?'Réessayer':'Retry'}</button>{problem!=='throttled'&&<a className="secondary journey-link" href="/connexion?next=/admin">{fr?'Se connecter avec une adresse e-mail':'Sign in with an email address'}</a>}</JourneyFrame>
 }
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/connexion',search:{next:'/admin'}});return {state}
 },component:Page})
-function Page(){const {state}=Route.useRouteContext();if(state.problem)return <AdminProblem problem={state.problem}/>;if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} touch={()=>touch()} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});if(next?.problem==='unavailable')throw Error('Temporary refresh failure');return next&&!next.mfa&&!next.problem?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
+function Page(){const {state}=Route.useRouteContext();if(state.problem)return <AdminProblem problem={state.problem}/>;if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} touch={()=>touch()} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});if(next?.problem==='throttled')throw Error('rate-limit');if(next?.problem==='unavailable')throw Error('Temporary refresh failure');return next&&!next.mfa&&!next.problem?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}

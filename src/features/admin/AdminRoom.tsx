@@ -32,16 +32,33 @@ type DocumentItem={id:string;titleFr:string;titleEn:string;category:string;statu
 type State={identity:{name:string;rooms:{id:string;name:string}[]};dashboard:{room:{id:string;name:string;status:string};capabilities:string[];applicants:Applicant[];sections:Section[];documents:DocumentItem[];metrics:AdminMetric[];uploadEnabled:boolean;manualScan?:boolean;nda?:NdaState|null;emails?:{id:string;kind:string;to:string;subject:string;status:string;attempts:number;lastError:string|null;createdAt:number;sentAt:number|null}[]|null;team?:{members:{id:string;name:string;email:string;capabilities:string[];revoked:boolean;self:boolean}[];invites:{id:string;email:string;capabilities:string[];createdAt:number;expiresAt:number;status:string}[]}|null;images?:Record<string,{src:string;width:number;height:number}>;contacts:Contact[];questions:Question[];analytics:AnalyticsResult|null;technicalTargets:{key:string;label:string}[];access:{groups:{id:string;name:string;profileIds:string[]}[];links:{id:string;label:string;targets:{capability:string;resourceId?:string}[];email:string|null;startsAt:number;expiresAt:number;grantUntil:number|null;maxUses:number;uses:number;active:boolean;revoked:boolean}[]}|null}}
 export function AdminRoom({initial,reload,touch,command,history,questionRead,technical,createLink,reviewUrl,uploadImage}:{initial:State;touch:()=>Promise<{ok:boolean}>;reload:()=>Promise<State|null>;command:(data:AdminCommand)=>Promise<{ok:boolean}>;history:(id:string)=>Promise<HistoryEvent[]|null>;questionRead:(id:string)=>Promise<Thread|null>;technical:(key:string,draft:boolean)=>Promise<TechnicalResult|null>;createLink:Parameters<typeof AccessManager>[0]['createLink'];reviewUrl:(documentId:string)=>Promise<string|null>;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
  const [data,setData]=useState<State|null>(initial),[busy,setBusy]=useState(false),[view,setView]=useState('dashboard'),[menu,setMenu]=useState(false),[palette,setPalette]=useState(false)
- const seq=useRef(0),lastTouch=useRef(0),touching=useRef(false)
+ const seq=useRef(0),lastTouch=useRef(0),touching=useRef(false),lastVerified=useRef(Date.now())
  const [connectionWarning,setConnectionWarning]=useState(false)
- useEffect(()=>{let alive=true;const activity=(event:Event)=>{if(!event.isTrusted||document.visibilityState!=='visible'||touching.current||Date.now()-lastTouch.current<60000)return;touching.current=true;lastTouch.current=Date.now();void touch().then(async r=>{if(!r.ok){if(alive)setData(null);return}const session=await authClient.getSession();if(session.error)throw Error('Session refresh unavailable');if(alive&&!session.data)setData(null)}).catch(()=>{if(alive)setConnectionWarning(true)}).finally(()=>{touching.current=false})};const events=['pointerdown','keydown','wheel','touchstart'] as const;for(const event of events)window.addEventListener(event,activity,{passive:true});return()=>{alive=false;for(const event of events)window.removeEventListener(event,activity)}},[touch])
+ useEffect(()=>{let alive=true;const activity=(event:Event)=>{if(!event.isTrusted||document.visibilityState!=='visible'||touching.current||Date.now()-lastTouch.current<120000)return;touching.current=true;lastTouch.current=Date.now();void touch().then(async r=>{if(!r.ok){if(alive)setData(null);return}const session=await authClient.getSession();if(session.error)throw Error('Session refresh unavailable');if(alive&&!session.data)setData(null)}).catch(()=>{if(alive)setConnectionWarning(true)}).finally(()=>{touching.current=false})};const events=['pointerdown','keydown','wheel','touchstart'] as const;for(const event of events)window.addEventListener(event,activity,{passive:true});return()=>{alive=false;for(const event of events)window.removeEventListener(event,activity)}},[touch])
  // The URL fragment is client-only: read it after mount (no SSR mismatch) and follow back/forward.
  useEffect(()=>{const sync=()=>{const h=location.hash.slice(1);if(h)setView(h)};sync();window.addEventListener('hashchange',sync);return()=>window.removeEventListener('hashchange',sync)},[])
  async function run(data:AdminCommand){setBusy(true);seq.current++
-  try{const result=await command(data);if(!result.ok)throw Error('Denied');const token=++seq.current;const next=await reload().catch(()=>null);if(token===seq.current&&next)setData(next);toast.success(success[data.kind]??'Modification enregistrée')}catch{toast.error('Action refusée',{description:'Vérifiez vos droits, les dates ou les champs, puis réessayez.'})}finally{setBusy(false)}
+  try{const result=await command(data);if(!result.ok)throw Error('Denied');const token=++seq.current;const next=await reload().catch(()=>null);if(token===seq.current&&next){lastVerified.current=Date.now();setData(next)};toast.success(success[data.kind]??'Modification enregistrée')}catch{toast.error('Action refusée',{description:'Vérifiez vos droits, les dates ou les champs, puis réessayez.'})}finally{setBusy(false)}
  }
- // Background refresh tolerates transient failures: only two consecutive "no session" answers end the session view.
- useEffect(()=>{let alive=true,misses=0;async function refresh(){const token=++seq.current;try{const next=await reload();if(!alive||seq.current!==token)return;if(next){misses=0;setConnectionWarning(false);setData(next)}else if(++misses>=2)setData(null);else window.setTimeout(()=>void refresh(),2500)}catch{if(alive)setConnectionWarning(true)}}const id=window.setInterval(()=>{if(document.visibilityState==='visible')void refresh()},30000);const focus=()=>void refresh();window.addEventListener('focus',focus);return()=>{alive=false;seq.current++;window.clearInterval(id);window.removeEventListener('focus',focus)}},[reload])
+ // Single-flight refresh, no burst on focus, no automatic retries against a throttled backend.
+ const refreshRef=useRef(reload),busyRef=useRef(busy)
+ useEffect(()=>{refreshRef.current=reload;busyRef.current=busy},[reload,busy])
+ useEffect(()=>{
+  let alive=true,inFlight=false,lastStart=Date.now(),nextAllowed=0
+  async function refresh(){
+   if(!alive||inFlight||busyRef.current||touching.current||document.visibilityState!=='visible'||Date.now()<nextAllowed||Date.now()-lastStart<45000)return
+   inFlight=true;lastStart=Date.now();const token=++seq.current
+   try{const next=await refreshRef.current();if(!alive||seq.current!==token)return;if(next){lastVerified.current=Date.now();setConnectionWarning(false);setData(next)}else{alive=false;seq.current++;setData(null)}}
+   catch(error){nextAllowed=Date.now()+60000;if(alive&&seq.current===token)setConnectionWarning(true);void error}
+   finally{inFlight=false}
+  }
+  const checkAge=()=>{if(alive&&Date.now()-lastVerified.current>=90000){alive=false;seq.current++;setData(null)}}
+  const timer=window.setInterval(()=>{checkAge();if(alive)void refresh()},5000)
+  const focus=()=>{checkAge();if(alive)void refresh()}
+  window.addEventListener('focus',focus)
+  return()=>{alive=false;seq.current++;window.clearInterval(timer);window.removeEventListener('focus',focus)}
+ },[])
+
  if(!data)return <main className="adm-gone"><ShieldAlert size={28}/><h1>Vérification de session requise</h1><p>Votre accès d’administration doit être revérifié. Si votre session est encore valide, seul l’Authenticator sera demandé.</p><a className="dr-btn" href="/admin">Vérifier ma session</a></main>
  const {dashboard:d,identity}=data,roomId=d.room.id,has=(cap:string)=>d.capabilities.includes(cap)
  const review=d.sections.filter(s=>s.latest?.state==='review'),published=d.sections.filter(s=>s.published)
