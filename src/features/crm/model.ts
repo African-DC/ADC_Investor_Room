@@ -13,3 +13,7 @@ export function fundraisingSummary(rows:readonly {stage:Stage;expectedXof?:numbe
  const eligible=rows.filter(c=>c.stage==='committed'||c.stage==='closed')
  return {expectedXof:open.filter(c=>c.stage!=='committed').reduce((n,c)=>n+(c.expectedXof??0),0),expectedCount:open.filter(c=>c.stage!=='committed'&&c.expectedXof!=null).length,committedXof:eligible.reduce((n,c)=>n+(c.committedXof??0),0),committedCount:eligible.filter(c=>c.committedXof!=null).length,missingCommitments:eligible.filter(c=>c.committedXof==null).length,due:open.filter(c=>['today','overdue'].includes(followupStatus(c.dueDate,today))).length,unassigned:open.filter(c=>c.owner==='none'||c.owner==='unavailable').length}
 }
+
+export const interactionTypes=['note','call','email','meeting','followup'] as const
+export type InteractionType=typeof interactionTypes[number]
+export const interactionLabels:Record<InteractionType,string>={note:'Note interne',call:'Appel',email:'E-mail',meeting:'Rendez-vous',followup:'Relance'}
