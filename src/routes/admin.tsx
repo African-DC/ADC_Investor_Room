@@ -3,36 +3,63 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader,setResponseHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { getAuthBridge } from '../lib/auth-server'
+import { safeAuthFailure } from '../lib/auth-token'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { adminCommand } from '../features/admin/contracts'
 import { targetsFor,draftText } from '../features/technical/model'
 import { getTechnicalSnapshot } from '../server/githubReporting'
 import { AdminRoom } from '../features/admin/AdminRoom'
+import type { SecurityAction } from '../features/admin/SecurityPanel'
+import { JourneyFrame } from '../features/onboarding/JourneyFrame'
+import { useEffect,useState } from 'react'
 import { MfaGate } from '../features/admin/MfaGate'
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 // Admin UI is allowed wherever the flag is on: every privileged Convex call enforces session-bound TOTP MFA.
 // A missing capability for one panel must not break the whole back office.
-async function safe<T>(p:Promise<T>):Promise<T|null>{try{return await p}catch{return null}}
+async function safe<T>(panel:string,enabled:boolean,load:()=>Promise<T>,unavailable:string[]):Promise<T|null>{if(!enabled)return null;try{return await load()}catch(error){unavailable.push(panel);console.warn('[adc:panel] unavailable',{panel,...safeAuthFailure(error)});return null}}
 const adminAllowed=()=>process.env.ADC_STAGING_ADMIN_UI==='true'
 const search=z.object({roomId:z.string().max(128).optional()})
 const load=createServerFn({method:'GET'}).validator(search).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge()
  if(!bridge||!adminAllowed())return null
+ let stage='token'
  try{
-  // Pending invitations for this verified email become memberships before the MFA gate.
-  await bridge.fetchAuthMutation(api.team.claim,{}).catch(()=>null)
-  const mfa=await bridge.fetchAuthQuery(api.mfa.status,{})
-  if(!mfa)return null
+  if(!await bridge.getToken())return {problem:'signin' as const}
+  stage='mfa-status'
+  let mfa=await bridge.fetchAuthQuery(api.mfa.status,{})
+  // Existing administrators should never be locked out by a failed invitation claim.
+  // For new members, claiming is still mandatory and remains verified-email gated.
+  if(!mfa||!data.roomId){
+   stage='invitation-claim'
+   try{await bridge.fetchAuthMutation(api.team.claim,{});if(!mfa){stage='mfa-status';mfa=await bridge.fetchAuthQuery(api.mfa.status,{})}}
+   catch(error){if(!mfa)throw error;const failure=safeAuthFailure(error);console.warn('[adc:admin] invitation claim deferred',failure);if(failure.kind==='rate-limit')throw error}
+  }
+  if(!mfa)return {problem:'membership' as const}
   if(!mfa.verified)return {mfa} as const
+  stage='room-membership'
   const identity=await bridge.fetchAuthQuery(api.admin.rooms,{})
-  if(!identity)return null
+  if(!identity)return {problem:'membership' as const}
   const room=data.roomId?identity.rooms.find(r=>r.id===data.roomId):identity.rooms[0]
-  if(!room)return null
+  if(!room)return {problem:'membership' as const}
+  stage='dashboard'
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
-  const metrics=await safe(bridge.fetchAuthQuery(api.finance.adminList,{roomId:room.id}));const contacts=await safe(bridge.fetchAuthQuery(api.crm.list,{roomId:room.id}));const questions=await safe(bridge.fetchAuthQuery(api.qa.adminList,{roomId:room.id}));const analytics=await safe(bridge.fetchAuthQuery(api.analytics.dashboard,{roomId:room.id,days:30}));const access=await safe(bridge.fetchAuthQuery(api.access.overview,{roomId:room.id}));const team=await safe(bridge.fetchAuthQuery(api.team.list,{roomId:room.id}));const emails=await safe(bridge.fetchAuthQuery(api.outbox.list,{roomId:room.id}));const nda=await safe(bridge.fetchAuthQuery(api.nda.adminView,{roomId:room.id}));const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
- }catch{return null}
+  const unavailablePanels:string[]=[]
+  const has=(...caps:string[])=>caps.some(c=>(dashboard.capabilities as readonly string[]).includes(c))
+  const args={roomId:room.id}
+  const [metrics,contacts,crmSettings,questions,analytics,access,team,emails,nda]=await Promise.all([
+   safe('finance',has('finance:edit','finance:review'),()=>bridge.fetchAuthQuery(api.finance.adminList,args),unavailablePanels),safe('crm',has('crm:read','crm:edit'),()=>bridge.fetchAuthQuery(api.crm.list,args),unavailablePanels),safe('crm',has('crm:read','crm:edit'),()=>bridge.fetchAuthQuery(api.crm.settings,args),unavailablePanels),safe('qa',has('qa:read','qa:reply'),()=>bridge.fetchAuthQuery(api.qa.adminList,args),unavailablePanels),safe('analytics',has('analytics:read'),()=>bridge.fetchAuthQuery(api.analytics.dashboard,{...args,days:30}),unavailablePanels),safe('access',has('access:manage'),()=>bridge.fetchAuthQuery(api.access.overview,args),unavailablePanels),safe('team',has('access:manage'),()=>bridge.fetchAuthQuery(api.team.list,args),unavailablePanels),safe('emails',has('access:manage'),()=>bridge.fetchAuthQuery(api.outbox.list,args),unavailablePanels),safe('nda',has('access:manage'),()=>bridge.fetchAuthQuery(api.nda.adminView,args),unavailablePanels)
+  ]);const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,unavailablePanels:unavailablePanels.sort(),metrics:metrics??[],contacts:contacts??[],crmSettings,questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
+ }catch(error){
+  const failure=safeAuthFailure(error)
+  console.warn('[adc:admin] load failed',{stage,...failure})
+  if(failure.kind==='rate-limit')return {problem:'throttled' as const}
+  if(failure.kind==='mfa-required'){
+   try{const mfa=await bridge.fetchAuthQuery(api.mfa.status,{});if(mfa&&!mfa.verified)return {mfa} as const}catch{/* remain fail-closed */}
+  }
+  return {problem:'unavailable' as const}
+ }
 })
 const command=createServerFn({method:'POST'}).validator(adminCommand).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
@@ -44,8 +71,9 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
    case 'financeDraft':await bridge.fetchAuthMutation(api.finance.draft,{roomId,sectionId:data.sectionId as Id<'sections'>,kind:data.metricKind,scope:data.scope,periodStart:data.periodStart,periodEnd:data.periodEnd,definitionFr:data.definitionFr,definitionEn:data.definitionEn,value:data.value,unit:data.unit,evidenceVersionIds:data.evidenceVersionIds as Id<'documentVersions'>[]});break
    case 'financeTransition':await bridge.fetchAuthMutation(api.finance.transition,{roomId,metricId:data.metricId as Id<'financialMetrics'>,action:data.action});break
    case 'documentTransition':if(data.action==='publish')await bridge.fetchAuthMutation(api.documents.adminPublish,{roomId,documentId:data.documentId as Id<'documents'>});else await bridge.fetchAuthMutation(api.documents.adminArchive,{roomId,documentId:data.documentId as Id<'documents'>});break
-   case 'crmUpdate':await bridge.fetchAuthMutation(api.crm.update,{roomId,profileId:data.profileId as Id<'investorProfiles'>,stage:data.stage,nextAction:data.nextAction,dueDate:data.dueDate,assignToMe:data.assignToMe,expectedRevision:data.expectedRevision});break
-   case 'crmNote':await bridge.fetchAuthMutation(api.crm.note,{roomId,profileId:data.profileId as Id<'investorProfiles'>,text:data.text});break
+   case 'crmUpdate':await bridge.fetchAuthMutation(api.crm.update,{roomId,profileId:data.profileId as Id<'investorProfiles'>,stage:data.stage,nextAction:data.nextAction,dueDate:data.dueDate,assignToMe:data.assignToMe,ownerMembershipId:data.ownerMembershipId as Id<'stagingAdminMemberships'>|null|undefined,expectedXof:data.expectedXof,committedXof:data.committedXof,expectedRevision:data.expectedRevision});break
+   case 'crmTarget':await bridge.fetchAuthMutation(api.crm.setTarget,{roomId,targetXof:data.targetXof,expectedTarget:data.expectedTarget});break
+   case 'crmNote':await bridge.fetchAuthMutation(api.crm.note,{roomId,profileId:data.profileId as Id<'investorProfiles'>,text:data.text,interaction:data.interaction});break
    case 'qaReply':await bridge.fetchAuthMutation(api.qa.adminReply,{roomId,questionId:data.questionId as Id<'questions'>,body:data.body});break
    case 'qaClose':await bridge.fetchAuthMutation(api.qa.close,{roomId,questionId:data.questionId as Id<'questions'>});break
    case 'grant':await bridge.fetchAuthMutation(api.admin.grant,{roomId,profileId:data.profileId as Id<'investorProfiles'>,capability:data.capability,sectionId:data.sectionId as Id<'sections'>|undefined,effect:data.effect,expiresAt:data.expiresAt});break
@@ -129,14 +157,36 @@ const createLink=createServerFn({method:'POST'}).validator(linkInput).handler(as
 const reviewUrl=createServerFn({method:'POST'}).validator(z.object({roomId:z.string().max(128),documentId:z.string().max(128)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())return null
- try{return await bridge.fetchAuthQuery(api.documents.reviewUrl,{roomId:data.roomId as Id<'rooms'>,documentId:data.documentId as Id<'documents'>})}catch{return null}
+ try{const allowed=await bridge.fetchAuthQuery(api.documents.reviewUrl,{roomId:data.roomId as Id<'rooms'>,documentId:data.documentId as Id<'documents'>});return allowed?'/api/documents/file?'+new URLSearchParams({roomId:data.roomId,documentId:data.documentId,review:'1'}).toString():null}catch{return null}
 })
 const uploadImage=createServerFn({method:'POST'}).validator(z.object({roomId:z.string().max(128),dataUrl:z.string().max(900000),width:z.number().int().min(1).max(4000),height:z.number().int().min(1).max(4000)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())return null
  try{return await bridge.fetchAuthMutation(api.media.upload,{...data,roomId:data.roomId as Id<'rooms'>})}catch{return null}
 })
+const touch=createServerFn({method:'POST'}).handler(async()=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())throw Error('Unavailable')
+ return bridge.fetchAuthMutation(api.mfa.touch,{})
+})
+const securityRead=createServerFn({method:'GET'}).handler(async()=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge();if(!bridge||!adminAllowed())return null
+ return bridge.fetchAuthQuery(api.mfa.securityCenter,{})
+})
+const securityChange=createServerFn({method:'POST'}).validator(z.discriminatedUnion('kind',[z.object({kind:z.literal('idle'),minutes:z.number().int().min(15).max(480)}),z.object({kind:z.literal('revoke'),proofId:z.string().max(128)})])).handler(async({data})=>{
+ setResponseHeaders(new Headers(headers()))
+ const bridge=getAuthBridge();if(!bridge||!adminAllowed()||!sameOrigin())return {ok:false}
+ try{return data.kind==='idle'?await bridge.fetchAuthMutation(api.mfa.setIdle,{minutes:data.minutes}):await bridge.fetchAuthMutation(api.mfa.revokeProof,{proofId:data.proofId as Id<'adminMfaProofs'>})}catch{return {ok:false}}
+})
+function AdminProblem({problem}:{problem:'signin'|'membership'|'unavailable'|'throttled'}){
+ const [lang,setLang]=useState<'fr'|'en'>('fr'),fr=lang==='fr'
+ const [remaining,setRemaining]=useState(problem==='throttled'?60:0)
+ useEffect(()=>{if(problem!=='throttled')return;const until=Date.now()+60000;const timer=window.setInterval(()=>setRemaining(Math.max(0,Math.ceil((until-Date.now())/1000))),1000);return()=>window.clearInterval(timer)},[problem])
+ const title=problem==='throttled'?(fr?'Vérification temporairement limitée.':'Verification temporarily limited.'):problem==='membership'?(fr?'Accès administrateur non attribué.':'Admin access not assigned.'):problem==='signin'?(fr?'Connexion requise.':'Sign-in required.'):(fr?'Connexion momentanément indisponible.':'Connection temporarily unavailable.')
+ return <JourneyFrame space="admin" lang={lang} setLang={setLang} tone="alert"><h1>{title}</h1><p role="alert" className="frame-lead">{problem==='throttled'?(fr?'Le serveur limite temporairement les requêtes. Inutile de redemander un lien de connexion.':'The server is temporarily limiting requests. No need to request another sign-in link.'):problem==='membership'?(fr?'Vérifiez que votre invitation est active et correspond à votre adresse e-mail vérifiée. Contactez ADC si nécessaire.':'Check that your invitation is active and matches your verified email. Contact ADC if needed.'):problem==='signin'?(fr?'Connectez-vous par lien ou code e-mail, puis validez votre Authenticator.':'Sign in by email link or code, then verify your authenticator.'):(fr?'Impossible de vérifier votre accès pour le moment. Réessayez ; si le problème persiste, reconnectez-vous par e-mail.':'Your access could not be verified. Retry; if the problem persists, sign in by email again.')}</p><button className="primary journey-primary" disabled={remaining>0} onClick={()=>location.reload()}>{remaining>0?(fr?'Réessayer dans ':'Retry in ')+remaining+' s':fr?'Réessayer':'Retry'}</button>{problem!=='throttled'&&<a className="secondary journey-link" href="/connexion?next=/admin">{fr?'Se connecter avec une adresse e-mail':'Sign in with an email address'}</a>}</JourneyFrame>
+}
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/connexion',search:{next:'/admin'}});return {state}
 },component:Page})
-function Page(){const {state}=Route.useRouteContext();if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});return next&&!next.mfa?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
+function Page(){const {state}=Route.useRouteContext();if(state.problem)return <AdminProblem problem={state.problem}/>;if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom securityRead={()=>securityRead()} securityChange={(data:SecurityAction)=>securityChange({data})} uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} touch={()=>touch()} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});if(next?.problem==='throttled')throw Error('rate-limit');if(next?.problem==='unavailable')throw Error('Temporary refresh failure');return next&&!next.mfa&&!next.problem?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}

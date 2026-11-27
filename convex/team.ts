@@ -45,7 +45,9 @@ export const claim=mutation({args:{},handler:async ctx=>{
 export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'access:manage')
  const members=[]
- for(const m of await ctx.db.query('stagingAdminMemberships').collect()){if(m.roomId!==a.roomId)continue;const u=await authComponent.getAnyUserById(ctx,m.authUserId).catch(()=>null);members.push({id:m._id,name:u?.name??'—',email:u?.email??'—',capabilities:m.capabilities,revoked:!!m.revokedAt,self:m.authUserId===user._id})}
+ const rows=await ctx.db.query('stagingAdminMemberships').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(101)
+ if(rows.length>100)throw Error('Pagination required')
+ for(const m of rows){const u=await authComponent.getAnyUserById(ctx,m.authUserId).catch(()=>null);members.push({id:m._id,name:u?.name??'—',email:u?.email??'—',capabilities:m.capabilities,revoked:!!m.revokedAt,self:m.authUserId===user._id})}
  const invites=(await ctx.db.query('adminInvites').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)).map(i=>({id:i._id,email:i.email,capabilities:i.capabilities,createdAt:i.createdAt,expiresAt:i.expiresAt,status:i.revokedAt?'revoked':i.acceptedAt?'accepted':i.expiresAt<=Date.now()?'expired':'pending'}))
  return {members,invites}
 }})

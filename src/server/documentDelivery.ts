@@ -7,10 +7,20 @@ const headers={'Cache-Control':'private, no-store, max-age=0','Referrer-Policy':
 const denied=()=>new Response('Document unavailable',{status:404,headers})
 export async function deliverDocument(request:Request){
  const bridge=getAuthBridge(),secret=process.env.ADC_DOCUMENT_DELIVERY_SECRET,site=process.env.VITE_CONVEX_SITE_URL
- if(!bridge||process.env.ADC_PORTAL_ENABLED!=='true'||process.env.ADC_DOCUMENTS_ENABLED!=='true'||!secret||secret.length<32||!site)return denied()
+ if(!bridge||!secret||secret.length<32)return denied()
  const url=new URL(request.url),roomId=url.searchParams.get('roomId'),documentId=url.searchParams.get('documentId'),download=url.searchParams.get('download')==='1'
  if(!roomId||!documentId||roomId.length>128||documentId.length>128)return denied()
+ const review=url.searchParams.get('review')==='1'
  try{
+  if(review){
+   if(download||process.env.ADC_STAGING_ADMIN_UI!=='true')return denied()
+   const file=await bridge.fetchAuthAction(api.documents.reviewFile,{roomId:roomId as Id<'rooms'>,documentId:documentId as Id<'documents'>,deliverySecret:secret})
+   if(!file||file.sizeBytes<5||file.sizeBytes>MAX_UPLOAD)return denied()
+   const bytes=new Uint8Array(file.bytes)
+   if(bytes.length!==file.sizeBytes||createHash('sha256').update(bytes).digest('hex')!==file.sha256||!isPdf(bytes))return denied()
+   return new Response(bytes,{headers:{...headers,'Content-Type':'application/pdf','Content-Length':String(bytes.length),'Content-Disposition':'inline; filename="adc-review.pdf"'}})
+  }
+  if(process.env.ADC_PORTAL_ENABLED!=='true'||process.env.ADC_DOCUMENTS_ENABLED!=='true'||!site)return denied()
   const ticket=randomBytes(32).toString('hex')
   const file=await bridge.fetchAuthMutation(api.documents.authorizeDelivery,{roomId:roomId as Id<'rooms'>,documentId:documentId as Id<'documents'>,download,deliverySecret:secret,ticket})
   if(!file||file.sizeBytes<5||file.sizeBytes>MAX_UPLOAD)return denied()

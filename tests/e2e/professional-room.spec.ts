@@ -1,0 +1,36 @@
+import {test,expect} from '@playwright/test'
+test('investor searches documents without accents and filters sections',async({page})=>{
+ await page.goto('/dev-preview?state=room')
+ const search=page.getByRole('searchbox',{name:'Rechercher une rubrique ou un document'})
+ await expect(search).toBeVisible()
+ await search.fill('demonstration pdf')
+ await expect(page.getByText('Document de démonstration',{exact:true})).toBeVisible()
+ await expect(page.getByText('Autre document fictif',{exact:true})).toHaveCount(0)
+ await expect(page.getByRole('heading',{name:'Documents autorisés (1)'})).toBeVisible()
+ await search.fill('aucunresultat987')
+ await expect(page.getByText('Document de démonstration',{exact:true})).toHaveCount(0)
+})
+test('an unavailable team panel never presents a false empty list',async({page})=>{
+ await page.goto('/dev-preview?state=admin-unavailable#team')
+ await expect(page.getByRole('heading',{name:'Ce panneau est momentanément indisponible.'})).toBeVisible()
+ await expect(page.getByRole('button',{name:'Créer l’invitation'})).toHaveCount(0)
+ await page.getByRole('button',{name:'Réessayer',exact:true}).click()
+ await expect(page.getByRole('heading',{name:'Ce panneau est momentanément indisponible.'})).toBeVisible()
+})
+test('failed admin invitation preserves the email',async({page})=>{
+ await page.goto('/dev-preview?state=admin-invite-fail#team')
+ const email=page.getByRole('textbox',{name:'Adresse e-mail'})
+ await email.fill('new-admin@example.com')
+ await page.getByRole('button',{name:'Créer l’invitation'}).click()
+ await expect(page.getByText('Action refusée',{exact:true})).toBeVisible()
+ await expect(email).toHaveValue('new-admin@example.com')
+})
+
+test('security center exposes policy without session tokens',async({page})=>{
+ await page.goto('/dev-preview?state=admin#security')
+ await expect(page.getByRole('heading',{name:'Centre de sécurité',exact:true})).toBeVisible()
+ await expect(page.getByText('Cette session',{exact:true})).toBeVisible()
+ await expect(page.getByLabel('Inactivité maximale (minutes)')).toHaveValue('120')
+ await page.getByLabel('Inactivité maximale (minutes)').fill('30')
+ await expect(page.getByRole('button',{name:'Enregistrer',exact:true})).toBeEnabled()
+})

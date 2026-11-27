@@ -1,32 +1,35 @@
 // Admin TOTP MFA. Proof is bound to the Better Auth session id carried in the Convex JWT.
 import { action,query,mutation,internalMutation,internalQuery } from './_generated/server'
 import type { QueryCtx,MutationCtx } from './_generated/server'
+import type { Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { v } from 'convex/values'
 import { authComponent } from './auth'
 import { base32Encode,verifyTotp,seal,unseal,sha256Hex,normalizeRecovery } from './lib/totp'
-const PROOF_TTL=12*3600_000,LOCK_AFTER=5,LOCK_MS=15*60_000,ISSUER='ADC Investor Room'
+const ABSOLUTE_TTL=24*3600_000,LOCK_AFTER=5,LOCK_MS=15*60_000,ISSUER='ADC Investor Room'
+function idleMs(){const n=Number(process.env.ADC_ADMIN_IDLE_MINUTES);return Number.isFinite(n)&&n>=15&&n<=480?n*60000:120*60000}
+function effectiveIdleMs(mfa:{idleMinutes?:number}|null){const n=mfa?.idleMinutes;return Math.min(idleMs(),typeof n==='number'&&Number.isInteger(n)&&n>=15&&n<=480?n*60000:idleMs())}
+function proofValid(proof:{authUserId:string;expiresAt:number;verifiedAt:number;lastActivityAt?:number}|null,userId:string,now:number,idle=idleMs()){return !!proof&&proof.authUserId===userId&&proof.expiresAt>now&&proof.verifiedAt+ABSOLUTE_TTL>now&&(proof.lastActivityAt??proof.verifiedAt)+idle>now}
 async function actor(ctx:QueryCtx|MutationCtx){
  const user=await authComponent.safeGetAuthUser(ctx),id=await ctx.auth.getUserIdentity()
  const sessionId=typeof id?.sessionId==='string'?id.sessionId:null
  if(!user?.emailVerified||!sessionId)return null
- const member=await ctx.db.query('stagingAdminMemberships').withIndex('by_user_room',q=>q.eq('authUserId',user._id)).first()
- return member&&!member.revokedAt?{user,sessionId}:null
+ const memberships=await ctx.db.query('stagingAdminMemberships').withIndex('by_user_room',q=>q.eq('authUserId',user._id)).take(101)
+ return memberships.length<=100&&memberships.some(m=>!m.revokedAt)?{user,sessionId}:null
 }
 /** Throws unless the current session carries a valid MFA proof. Used by every privileged admin function. */
 export async function requireMfa(ctx:QueryCtx|MutationCtx,userId:string){
  const id=await ctx.auth.getUserIdentity(),sessionId=typeof id?.sessionId==='string'?id.sessionId:null
  if(!sessionId)throw new Error('MFA required')
  const proof=await ctx.db.query('adminMfaProofs').withIndex('by_session',q=>q.eq('sessionId',sessionId)).first()
- if(!proof||proof.authUserId!==userId||proof.expiresAt<=Date.now())throw new Error('MFA required')
  const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',userId)).unique()
- if(mfa?.status!=='active'||(mfa.activatedAt??0)>proof.verifiedAt)throw new Error('MFA required')
+ if(!proof||!proofValid(proof,userId,Date.now(),effectiveIdleMs(mfa))||mfa?.status!=='active'||(mfa.activatedAt??0)>proof.verifiedAt)throw new Error('MFA required')
 }
 export const status=query({args:{},handler:async ctx=>{
  const a=await actor(ctx);if(!a)return null
  const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',a.user._id)).unique()
  const proof=await ctx.db.query('adminMfaProofs').withIndex('by_session',q=>q.eq('sessionId',a.sessionId)).first()
- return {name:a.user.name,email:a.user.email,enrolled:mfa?.status==='active',verified:!!proof&&proof.authUserId===a.user._id&&proof.expiresAt>Date.now()&&mfa?.status==='active',lockedUntil:mfa?.lockedUntil&&mfa.lockedUntil>Date.now()?mfa.lockedUntil:null,recoveryLeft:mfa?.recoveryHashes.length??0}
+ return {name:a.user.name,email:a.user.email,enrolled:mfa?.status==='active',verified:!!proof&&proofValid(proof,a.user._id,Date.now(),effectiveIdleMs(mfa))&&mfa?.status==='active'&&(mfa.activatedAt??0)<=proof.verifiedAt,lockedUntil:mfa?.lockedUntil&&mfa.lockedUntil>Date.now()?mfa.lockedUntil:null,recoveryLeft:mfa?.recoveryHashes.length??0}
 }})
 export const actorForAction=internalQuery({args:{},handler:async ctx=>{const a=await actor(ctx);if(!a)return null;const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',a.user._id)).unique();return {userId:a.user._id,email:a.user.email,active:mfa?.status==='active'}}})
 export const storePending=internalMutation({args:{userId:v.string(),secretSealed:v.string()},handler:async(ctx,a)=>{
@@ -55,7 +58,7 @@ export const recordAttempt=internalMutation({args:{userId:v.string(),sessionId:v
  if(a.activate){if(mfa.status!=='pending')return false;await ctx.db.patch(mfa._id,{status:'active',activatedAt:now,recoveryHashes:a.activate})}
  await ctx.db.patch(mfa._id,{failures:0,lockedUntil:undefined})
  for(const p of await ctx.db.query('adminMfaProofs').withIndex('by_session',q=>q.eq('sessionId',a.sessionId)).collect())await ctx.db.delete(p._id)
- await ctx.db.insert('adminMfaProofs',{authUserId:a.userId,sessionId:a.sessionId,verifiedAt:now+(a.activate?1:0),expiresAt:now+PROOF_TTL,method})
+ await ctx.db.insert('adminMfaProofs',{authUserId:a.userId,sessionId:a.sessionId,verifiedAt:now+(a.activate?1:0),expiresAt:now+effectiveIdleMs(mfa),lastActivityAt:now,method})
  await ctx.db.insert('auditLogs',{actorId:a.userId,event:a.activate?'admin.mfa.activated':'admin.mfa.verified_'+method,resourceId:a.sessionId,at:now})
  return true
 }})
@@ -81,4 +84,70 @@ export const resetForUser=internalMutation({args:{authUserId:v.string(),operator
  const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',a.authUserId)).unique();if(mfa)await ctx.db.delete(mfa._id)
  for(const p of await ctx.db.query('adminMfaProofs').withIndex('by_user',q=>q.eq('authUserId',a.authUserId)).collect())await ctx.db.delete(p._id)
  await ctx.db.insert('auditLogs',{actorId:a.operatorId,event:'admin.mfa.reset',resourceId:a.authUserId,at:Date.now()})
+}})
+
+/** Renew only the current valid MFA proof after explicit user interaction, never on background reads. */
+export const touch=mutation({args:{},returns:v.object({ok:v.boolean(),expiresAt:v.optional(v.number())}),handler:async ctx=>{
+ const a=await actor(ctx);if(!a)return {ok:false}
+ const proof=await ctx.db.query('adminMfaProofs').withIndex('by_session',q=>q.eq('sessionId',a.sessionId)).unique(),now=Date.now()
+ const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',a.user._id)).unique()
+ if(!proof||!proofValid(proof,a.user._id,now,effectiveIdleMs(mfa))||mfa?.status!=='active'||(mfa.activatedAt??0)>proof.verifiedAt)return {ok:false}
+ if(now-(proof.lastActivityAt??proof.verifiedAt)<60000)return {ok:true,expiresAt:proof.expiresAt}
+ const expiresAt=Math.min(now+effectiveIdleMs(mfa),proof.verifiedAt+ABSOLUTE_TTL)
+ await ctx.db.patch(proof._id,{lastActivityAt:now,expiresAt})
+ return {ok:true,expiresAt}
+}})
+
+const securityEvents=['admin.mfa.enroll_started','admin.mfa.activated','admin.mfa.verified_totp','admin.mfa.verified_recovery','admin.mfa.failed','admin.mfa.proof_revoked','admin.mfa.idle_changed'] as const
+const proofView=v.object({id:v.id('adminMfaProofs'),current:v.boolean(),verifiedAt:v.number(),lastActivityAt:v.number(),expiresAt:v.number(),method:v.union(v.literal('totp'),v.literal('recovery'))})
+const securityView=v.object({idleMinutes:v.number(),maxIdleMinutes:v.number(),maxProofHours:v.number(),recoveryLeft:v.number(),proofs:v.array(proofView),truncated:v.boolean(),events:v.array(v.object({id:v.id('auditLogs'),event:v.string(),at:v.number()}))})
+/** Only the caller's own MFA state; never return Better Auth session IDs, credentials or recovery hashes. */
+export async function securitySnapshot(ctx:QueryCtx,userId:string,sessionId:string,now:number){
+ const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',userId)).unique()
+ if(mfa?.status!=='active')throw Error('MFA required')
+ const idle=effectiveIdleMs(mfa)
+ const rows=await ctx.db.query('adminMfaProofs').withIndex('by_user',q=>q.eq('authUserId',userId)).order('desc').take(101)
+ const proofs=rows.slice(0,100).filter(p=>proofValid(p,userId,now,idle)&&(mfa.activatedAt??0)<=p.verifiedAt).map(p=>({id:p._id,current:p.sessionId===sessionId,verifiedAt:p.verifiedAt,lastActivityAt:p.lastActivityAt??p.verifiedAt,expiresAt:Math.min(p.expiresAt,(p.lastActivityAt??p.verifiedAt)+idle,p.verifiedAt+ABSOLUTE_TTL),method:p.method}))
+ const logs=await ctx.db.query('auditLogs').withIndex('by_actor_and_at',q=>q.eq('actorId',userId)).order('desc').take(200)
+ const events=logs.filter(l=>(securityEvents as readonly string[]).includes(l.event)).slice(0,50).map(l=>({id:l._id,event:l.event,at:l.at}))
+ return {idleMinutes:idle/60000,maxIdleMinutes:idleMs()/60000,maxProofHours:ABSOLUTE_TTL/3600000,recoveryLeft:mfa.recoveryHashes.length,proofs,truncated:rows.length>100,events}
+}
+export const securityCenter=query({args:{},returns:v.union(v.null(),securityView),handler:async ctx=>{
+ const a=await actor(ctx);if(!a)return null
+ await requireMfa(ctx,a.user._id)
+ return securitySnapshot(ctx,a.user._id,a.sessionId,Date.now())
+}})
+export async function revokeOwnProof(ctx:MutationCtx,userId:string,sessionId:string,proofId:Id<'adminMfaProofs'>){
+ const proof=await ctx.db.get(proofId)
+ if(!proof||proof.authUserId!==userId||proof.sessionId===sessionId)return false
+ await ctx.db.delete(proof._id)
+ await ctx.db.insert('auditLogs',{actorId:userId,event:'admin.mfa.proof_revoked',at:Date.now()})
+ return true
+}
+export const revokeProof=mutation({args:{proofId:v.id('adminMfaProofs')},returns:v.object({ok:v.boolean()}),handler:async(ctx,a)=>{
+ const actorInfo=await actor(ctx);if(!actorInfo)return {ok:false}
+ await requireMfa(ctx,actorInfo.user._id)
+ return {ok:await revokeOwnProof(ctx,actorInfo.user._id,actorInfo.sessionId,a.proofId)}
+}})
+export async function setOwnIdle(ctx:MutationCtx,userId:string,minutes:number){
+ if(!Number.isInteger(minutes)||minutes<15||minutes>idleMs()/60000)return false
+ const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',userId)).unique()
+ if(mfa?.status!=='active')return false
+ // Persist a reduced deadline, so raising the preference later cannot resurrect an expired proof.
+ const proofs=await ctx.db.query('adminMfaProofs').withIndex('by_user',q=>q.eq('authUserId',userId)).take(101)
+ if(proofs.length>100)return false
+ const now=Date.now(),priorIdle=effectiveIdleMs(mfa),nextIdle=minutes*60000
+ for(const proof of proofs){
+  const expiresAt=Math.min(proof.expiresAt,(proof.lastActivityAt??proof.verifiedAt)+priorIdle,(proof.lastActivityAt??proof.verifiedAt)+nextIdle,proof.verifiedAt+ABSOLUTE_TTL)
+  if(expiresAt<=now)await ctx.db.delete(proof._id)
+  else if(expiresAt<proof.expiresAt)await ctx.db.patch(proof._id,{expiresAt})
+ }
+ await ctx.db.patch(mfa._id,{idleMinutes:minutes})
+ await ctx.db.insert('auditLogs',{actorId:userId,event:'admin.mfa.idle_changed',at:now})
+ return true
+}
+export const setIdle=mutation({args:{minutes:v.number()},returns:v.object({ok:v.boolean()}),handler:async(ctx,a)=>{
+ const actorInfo=await actor(ctx);if(!actorInfo)return {ok:false}
+ await requireMfa(ctx,actorInfo.user._id)
+ return {ok:await setOwnIdle(ctx,actorInfo.user._id,a.minutes)}
 }})
