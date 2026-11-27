@@ -21,8 +21,17 @@ export async function requestConvexToken(siteUrl:string,credentials:{cookie?:str
  throw new AuthTokenError('network')
 }
 export function safeAuthFailure(error:unknown){
+ if(error instanceof ConvexThrottleError)return {kind:'rate-limit',status:429,retryAfterSeconds:error.retryAfterSeconds}
  if(error instanceof AuthTokenError)return {kind:error.reason,status:error.status}
  const message=error instanceof Error?error.message:''
  const kind=/MFA required/i.test(message)?'mfa-required':/unauthenticated|unauthorized|authentication required|not authenticated/i.test(message)?'unauthenticated':/could not find public function|function.*not found/i.test(message)?'missing-function':/conflict|optimistic concurrency|OCC/i.test(message)?'database-conflict':/429|rate limit/i.test(message)?'rate-limit':/timeout|fetch failed|network/i.test(message)?'network':'backend-error'
  return {kind}
+}
+
+/** Classify an actual Convex HTTP 429 without logging request headers or response bodies. */
+export class ConvexThrottleError extends Error {constructor(readonly retryAfterSeconds:number){super('Convex HTTP rate limit');this.name='ConvexThrottleError'}}
+export async function convexFetch(input:RequestInfo|URL,init?:RequestInit,request:typeof fetch=fetch){
+ const response=await request(input,init)
+ if(response.status===429){const raw=response.headers.get('retry-after');const seconds=raw&&/^\d+$/.test(raw)?Number(raw):60;await response.body?.cancel().catch(()=>{});throw new ConvexThrottleError(Math.min(300,Math.max(60,seconds)))}
+ return response
 }
