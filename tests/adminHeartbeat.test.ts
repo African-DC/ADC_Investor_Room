@@ -1,0 +1,3 @@
+import {expect,it} from 'vitest'
+import {canVerify,HEARTBEAT_INTERVAL_MS,MAX_UNVERIFIED_MS,TOUCH_INTERVAL_MS} from '../src/features/admin/sessionPolicy'
+it('uses one minute checks, no hidden tab checks, no overlap or retry during throttling',()=>{expect(HEARTBEAT_INTERVAL_MS).toBe(60000);expect(MAX_UNVERIFIED_MS).toBe(90000);expect(TOUCH_INTERVAL_MS).toBe(300000);expect(canVerify(59999,0,true,false,0)).toBe(false);expect(canVerify(60000,0,true,false,0)).toBe(true);expect(canVerify(60000,0,false,false,0)).toBe(false);expect(canVerify(60000,0,true,true,0)).toBe(false);expect(canVerify(60000,0,true,false,61000)).toBe(false)})

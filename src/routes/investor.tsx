@@ -9,13 +9,16 @@ import { selectPassages } from '../server/intelligence'
 import { unchanged } from '../features/intelligence/retrieval'
 import type { Answer } from '../features/intelligence/retrieval'
 import { InvestorRoom } from '../features/portal/InvestorRoom'
+import {LiveConvex,liveConvexEnabled} from '../lib/LiveConvex'
+import {useConvex,useConvexAuth} from 'convex/react'
+import type {ComponentProps} from 'react'
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 const roomSearch=z.object({roomId:z.string().max(128).optional()})
 const getOverview=createServerFn({method:'GET'}).validator(roomSearch).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge()
  if(!bridge||process.env.ADC_PORTAL_ENABLED!=='true')return null
- try{if(!await bridge.getToken())return null;const overview=await bridge.fetchAuthQuery(api.portal.overview,{roomId:data.roomId as Id<'rooms'>|undefined});if(!overview)return null;const documents=overview.room&&!overview.nda&&process.env.ADC_DOCUMENTS_ENABLED==='true'?await bridge.fetchAuthQuery(api.documents.list,{roomId:overview.room.id}):[];const metrics=overview.room&&!overview.nda&&process.env.ADC_FINANCE_ENABLED==='true'?await bridge.fetchAuthQuery(api.finance.published,{roomId:overview.room.id}):[];const qaEnabled=!!overview.room&&!overview.nda&&process.env.ADC_QA_ENABLED==='true';const questions=qaEnabled&&overview.room?await bridge.fetchAuthQuery(api.qa.list,{roomId:overview.room.id}):[];const analytics=overview.room&&!overview.nda&&process.env.ADC_ANALYTICS_ENABLED==='true'?await bridge.fetchAuthQuery(api.analytics.settings,{roomId:overview.room.id}):null;return {...overview,documents,metrics,qaEnabled,questions,analytics,aiEnabled:!!overview.room&&!overview.nda&&process.env.ADC_AI_ENABLED==='true',aiExternal:process.env.ADC_AI_GATEWAY_APPROVED==='true'&&process.env.VERCEL_ENV!=='production'}}catch{throw Error('Temporary portal refresh failure')}
+ try{if(!await bridge.getToken())return null;const overview=await bridge.fetchAuthQuery(api.portal.overview,{roomId:data.roomId as Id<'rooms'>|undefined});if(!overview)return null;const documents=overview.room&&!overview.nda&&process.env.ADC_DOCUMENTS_ENABLED==='true'?await bridge.fetchAuthQuery(api.documents.list,{roomId:overview.room.id}):[];const metrics=overview.room&&!overview.nda&&process.env.ADC_FINANCE_ENABLED==='true'?await bridge.fetchAuthQuery(api.finance.published,{roomId:overview.room.id}):[];const qaEnabled=!!overview.room&&!overview.nda&&process.env.ADC_QA_ENABLED==='true';const questions=qaEnabled&&overview.room?await bridge.fetchAuthQuery(api.qa.list,{roomId:overview.room.id}):[];const analytics=overview.room&&!overview.nda&&process.env.ADC_ANALYTICS_ENABLED==='true'?await bridge.fetchAuthQuery(api.analytics.settings,{roomId:overview.room.id}):null;return {...overview,documents,metrics,qaEnabled,questions,analytics,transportFlags:{documents:process.env.ADC_DOCUMENTS_ENABLED==='true',finance:process.env.ADC_FINANCE_ENABLED==='true',qa:process.env.ADC_QA_ENABLED==='true',analytics:process.env.ADC_ANALYTICS_ENABLED==='true',ai:process.env.ADC_AI_ENABLED==='true'},aiEnabled:!!overview.room&&!overview.nda&&process.env.ADC_AI_ENABLED==='true',aiExternal:process.env.ADC_AI_GATEWAY_APPROVED==='true'&&process.env.VERCEL_ENV!=='production'}}catch{throw Error('Temporary portal refresh failure')}
 })
 const accept=createServerFn({method:'POST'}).validator(z.object({roomId:z.string().max(128),version:z.string().max(100),accepted:z.literal(true)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
@@ -68,5 +71,29 @@ export const Route=createFileRoute('/investor')({headers,validateSearch:roomSear
 },component:Page})
 function Page(){
  const {overview}=Route.useRouteContext()
- return <InvestorRoom key={overview.room?.id??'none'} initial={overview} refresh={roomId=>getOverview({data:{roomId}})} acceptNda={(roomId,version)=>accept({data:{roomId,version,accepted:true}})} questionRead={(roomId,questionId)=>questionRead({data:{roomId,questionId}})} engagement={(data)=>engagement({data})} intelligence={data=>askIntelligence({data})} questionSend={(roomId,a)=>a.kind==='close'?Promise.resolve({ok:false}):questionSend({data:{...a,roomId}})}/>
+ return <InvestorTransport flags={overview.transportFlags} key={overview.room?.id??'none'} initial={overview} refresh={roomId=>getOverview({data:{roomId}})} acceptNda={(roomId,version)=>accept({data:{roomId,version,accepted:true}})} questionRead={(roomId,questionId)=>questionRead({data:{roomId,questionId}})} engagement={(data)=>engagement({data})} intelligence={data=>askIntelligence({data})} questionSend={(roomId,a)=>a.kind==='close'?Promise.resolve({ok:false}):questionSend({data:{...a,roomId}})}/>
+}
+
+type InvestorFlags={documents:boolean;finance:boolean;qa:boolean;analytics:boolean;ai:boolean}
+type InvestorProps=ComponentProps<typeof InvestorRoom>&{flags:InvestorFlags}
+function InvestorTransport(props:InvestorProps){
+ if(!liveConvexEnabled())return <InvestorRoom {...props}/>
+ return <LiveConvex><SocketInvestor {...props}/></LiveConvex>
+}
+function SocketInvestor({flags,...props}:InvestorProps){
+ const client=useConvex(),auth=useConvexAuth(),ready=auth.isAuthenticated&&!auth.isLoading
+ const refresh:InvestorProps['refresh']=async id=>{
+  if(!ready)throw Error('Connection unavailable')
+  const overview=await client.query(api.portal.overview,{roomId:id as Id<'rooms'>|undefined,nonce:Date.now()})
+  if(!overview)return null
+  const roomId=overview.room?.id,allowed=!!roomId&&!overview.nda
+  const [documents,metrics,questions,analytics]=await Promise.all([
+   roomId&&allowed&&flags.documents?client.query(api.documents.list,{roomId}):[],
+   roomId&&allowed&&flags.finance?client.query(api.finance.published,{roomId}):[],
+   roomId&&allowed&&flags.qa?client.query(api.qa.list,{roomId}):[],
+   roomId&&allowed&&flags.analytics?client.query(api.analytics.settings,{roomId}):null
+  ])
+  return {...overview,documents,metrics,questions,analytics,qaEnabled:allowed&&flags.qa,aiEnabled:allowed&&flags.ai,aiExternal:props.initial.aiExternal}
+ }
+ return <InvestorRoom {...props} refresh={refresh}/>
 }

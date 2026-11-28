@@ -1,6 +1,6 @@
 import { useEffect,useRef,useState } from 'react'
 import { authClient } from '../../lib/auth-client'
-import { sameCapabilities } from './sessionPolicy'
+import { sameCapabilities,canVerify,MAX_UNVERIFIED_MS,TOUCH_INTERVAL_MS } from './sessionPolicy'
 import { Questions } from '../qa/Questions'
 import type { Question,Thread } from '../qa/Questions'
 import { TechnicalPanel } from '../technical/TechnicalPanel'
@@ -33,20 +33,23 @@ type Applicant={id:string;name:string;email:string;organization:string;grants:Gr
 type Section={id:string;slug:string;category:string;order:number;published:boolean;latest:{id:string;number:number;state:string;titleFr:string;titleEn:string;bodyFr:string;bodyEn:string;source:string;own:boolean}|null}
 type DocumentItem={id:string;titleFr:string;titleEn:string;category:string;status:string;version:{id:string;number:number;scanStatus:string;scanMethod?:string|null;sha256?:string;sizeBytes:number;own:boolean}|null}
 type State={identity:{name:string;rooms:{id:string;name:string;status?:string}[]};dashboard:{room:{id:string;name:string;description?:string;status:string};capabilities:string[];applicants:Applicant[];sections:Section[];documents:DocumentItem[];metrics:AdminMetric[];uploadEnabled:boolean;manualScan?:boolean;nda?:NdaState|null;emails?:{id:string;kind:string;to:string;subject:string;status:string;attempts:number;lastError:string|null;createdAt:number;sentAt:number|null}[]|null;team?:{members:{id:string;name:string;email:string;capabilities:string[];revoked:boolean;self:boolean}[];invites:{id:string;email:string;capabilities:string[];createdAt:number;expiresAt:number;status:string}[]}|null;images?:Record<string,{src:string;width:number;height:number}>;contacts:Contact[];questions:Question[];analytics:AnalyticsResult|null;technicalTargets:{key:string;label:string}[];access:{groups:{id:string;name:string;profileIds:string[]}[];links:{id:string;label:string;targets:{capability:string;resourceId?:string}[];email:string|null;startsAt:number;expiresAt:number;grantUntil:number|null;maxUses:number;uses:number;active:boolean;revoked:boolean}[]}|null}}
-export function AdminRoom({initial,reload,touch,command,history,questionRead,technical,createLink,reviewUrl,uploadImage,verifySession}:{initial:State;verifySession?:()=>Promise<{kind:'verified';capabilities:string[]}|{kind:'denied'|'temporary'}>;touch:()=>Promise<{ok:boolean}>;reload:()=>Promise<State|null>;command:(data:AdminCommand)=>Promise<{ok:boolean;invite?:Invite;reason?:string;roomCreatedId?:string;roomUpdated?:{id:string;name:string;description:string;status:string}}>;history:(id:string)=>Promise<HistoryEvent[]|null>;questionRead:(id:string)=>Promise<Thread|null>;technical:(key:string,draft:boolean)=>Promise<TechnicalResult|null>;createLink:Parameters<typeof AccessManager>[0]['createLink'];reviewUrl:(documentId:string)=>Promise<string|null>;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
+export function AdminRoom({initial,reload,touch,command,history,questionRead,technical,createLink,reviewUrl,uploadImage,verifySession,subscribeSession}:{initial:State;verifySession?:()=>Promise<{kind:'verified';capabilities:string[]}|{kind:'denied'|'temporary'}>;subscribeSession?:(onResult:(r:{kind:'verified';capabilities:string[]}|{kind:'denied'|'temporary'})=>void)=>()=>void;touch:()=>Promise<{ok:boolean}>;reload:()=>Promise<State|null>;command:(data:AdminCommand)=>Promise<{ok:boolean;invite?:Invite;reason?:string;retryAfterSeconds?:number;roomCreatedId?:string;roomUpdated?:{id:string;name:string;description:string;status:string}}>;history:(id:string)=>Promise<HistoryEvent[]|null>;questionRead:(id:string)=>Promise<Thread|null>;technical:(key:string,draft:boolean)=>Promise<TechnicalResult|null>;createLink:Parameters<typeof AccessManager>[0]['createLink'];reviewUrl:(documentId:string)=>Promise<string|null>;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
  const [data,setData]=useState<State|null>(initial),[busy,setBusy]=useState(false),[view,setView]=useState('dashboard'),[menu,setMenu]=useState(false),[palette,setPalette]=useState(false)
  const seq=useRef(0),lastTouch=useRef(Date.now()),touching=useRef(false),lastVerified=useRef(Date.now()),operation=useRef(false),cooldown=useRef(0)
  const [connectionWarning,setConnectionWarning]=useState(false),[retrying,setRetrying]=useState(false),[sessionWarning,setSessionWarning]=useState(false)
- useEffect(()=>{let alive=true;const activity=(event:Event)=>{if(!event.isTrusted||document.visibilityState!=='visible'||touching.current||operation.current||Date.now()<cooldown.current||Date.now()-lastTouch.current<120000)return;touching.current=true;lastTouch.current=Date.now();void touch().then(async r=>{if(!r.ok){if(alive)setData(null);return}const session=await authClient.getSession();if(session.error)throw Error('Session refresh unavailable');if(alive&&!session.data)setData(null)}).catch(()=>{cooldown.current=Date.now()+60000;if(alive)setConnectionWarning(true)}).finally(()=>{touching.current=false})};const events=['pointerdown','keydown','wheel','touchstart'] as const;for(const event of events)window.addEventListener(event,activity,{passive:true});return()=>{alive=false;for(const event of events)window.removeEventListener(event,activity)}},[touch])
+ const touchRef=useRef(touch);useEffect(()=>{touchRef.current=touch},[touch])
+ useEffect(()=>{let alive=true;const activity=(event:Event)=>{if(!event.isTrusted||document.visibilityState!=='visible'||touching.current||operation.current||Date.now()<cooldown.current||Date.now()-lastTouch.current<TOUCH_INTERVAL_MS)return;touching.current=true;lastTouch.current=Date.now();void touchRef.current().then(async r=>{if(!r.ok){if(alive)setData(null);return}const session=await authClient.getSession();if(session.error)throw Error('Session refresh unavailable');if(alive&&!session.data)setData(null)}).catch(()=>{cooldown.current=Date.now()+60000;if(alive)setConnectionWarning(true)}).finally(()=>{touching.current=false})};const events=['pointerdown','keydown','wheel','touchstart'] as const;for(const event of events)window.addEventListener(event,activity,{passive:true});return()=>{alive=false;for(const event of events)window.removeEventListener(event,activity)}},[])
  // The URL fragment is client-only: read it after mount (no SSR mismatch) and follow back/forward.
  useEffect(()=>{const sync=()=>{const h=location.hash.slice(1);if(h)setView(h)};sync();window.addEventListener('hashchange',sync);return()=>window.removeEventListener('hashchange',sync)},[])
  async function run(data:AdminCommand,onSuccess?:()=>void){
-  if(operation.current||touching.current){toast.error('Actualisation en cours',{description:'Réessayez après la fin de la vérification.'});return}
+  if(Date.now()<cooldown.current){toast.error('Serveur temporairement limité',{description:'Réessayez dans '+Math.ceil((cooldown.current-Date.now())/1000)+' secondes.'});return}
+  if(operation.current){toast.error('Actualisation en cours',{description:'Réessayez après la fin de la vérification.'});return}
   operation.current=true;setBusy(true);seq.current++
   try{
    const result=await command(data)
    if(!result.ok){
-    if(result.reason==='rate-limit'){cooldown.current=Date.now()+60000;setConnectionWarning(true);toast.error('Serveur temporairement limité',{description:'Votre saisie est conservée. Réessayez dans une minute.'});return}
+    if(result.reason==='rate-limit'){const seconds=result.retryAfterSeconds??60;cooldown.current=Date.now()+seconds*1000;setConnectionWarning(true);toast.error('Serveur temporairement limité',{description:'Votre saisie est conservée. Réessayez dans '+seconds+' secondes.'});return}
+    if(result.reason==='connection-pending'){toast.error('Connexion en cours',{description:'Votre saisie est conservée. Réessayez lorsque la connexion est établie.'});return}
     if(result.reason==='mfa-required'||result.reason==='unauthenticated'){setData(null);return}
     if(result.reason==='room-name-used'){toast.error('Ce nom de salle est déjà utilisé',{description:'Choisissez un nom différent.'});return}
     if(result.reason==='missing-function'){toast.error('Mise à jour du serveur nécessaire',{description:'L’action n’a pas été confirmée. Contactez ADC.'});return}
@@ -77,13 +80,14 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
  }
 
  // Single-flight refresh, no burst on focus, no automatic retries against a throttled backend.
+ useEffect(()=>{if(!subscribeSession)return;return subscribeSession(result=>{if(result.kind==='denied'||(result.kind==='verified'&&!sameCapabilities(currentCaps.current,result.capabilities))){seq.current++;setData(null)}else if(result.kind==='temporary')setSessionWarning(true)})},[subscribeSession])
  const refreshRef=useRef(reload),busyRef=useRef(busy),verifyRef=useRef(verifySession),currentCaps=useRef(initial.dashboard.capabilities)
  useEffect(()=>{refreshRef.current=reload;busyRef.current=busy;verifyRef.current=verifySession;if(data)currentCaps.current=data.dashboard.capabilities},[reload,busy,verifySession,data])
  useEffect(()=>{
   let alive=true,inFlight=false,lastStart=Date.now(),nextAllowed=0
   async function refresh(){
-   if(!alive||inFlight||busyRef.current||operation.current||touching.current||Date.now()<cooldown.current||document.visibilityState!=='visible'||Date.now()<nextAllowed||Date.now()-lastStart<25000)return
-   inFlight=true;operation.current=true;lastStart=Date.now();const token=++seq.current
+   if(!alive||!canVerify(Date.now(),lastStart,document.visibilityState==='visible',inFlight||busyRef.current||operation.current||touching.current,Math.max(cooldown.current,nextAllowed)))return
+   inFlight=true;lastStart=Date.now();const token=seq.current
    try{
     if(verifyRef.current){
      const result=await verifyRef.current()
@@ -97,13 +101,13 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
     }
    }
    catch(error){nextAllowed=Date.now()+60000;cooldown.current=nextAllowed;if(alive&&seq.current===token)setSessionWarning(true);void error}
-   finally{inFlight=false;operation.current=false}
+   finally{inFlight=false}
   }
-  const checkAge=()=>{if(alive&&Date.now()-lastVerified.current>=90000){alive=false;seq.current++;setData(null)}}
+  const checkAge=()=>{if(alive&&Date.now()-lastVerified.current>=MAX_UNVERIFIED_MS){alive=false;seq.current++;setData(null)}}
   const timer=window.setInterval(()=>{checkAge();if(alive)void refresh()},5000)
   const focus=()=>{checkAge();if(alive)void refresh()}
-  window.addEventListener('focus',focus)
-  return()=>{alive=false;seq.current++;window.clearInterval(timer);window.removeEventListener('focus',focus)}
+  window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus)
+  return()=>{alive=false;seq.current++;window.clearInterval(timer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus)}
  },[])
 
  if(!data)return <main className="adm-gone"><ShieldAlert size={28}/><h1>Vérification de session requise</h1><p>Votre accès d’administration doit être revérifié. Si votre session est encore valide, seul l’Authenticator sera demandé.</p><a className="dr-btn" href="/admin">Vérifier ma session</a></main>

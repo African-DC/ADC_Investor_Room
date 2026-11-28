@@ -52,7 +52,7 @@ export async function overviewForIdentity(ctx:QueryCtx,user:{_id:string;name:str
  const images=await imagesFor(ctx,room._id,allowed.flatMap(s=>[...imageIdsIn(s.blocksFr),...imageIdsIn(s.blocksEn)]))
  return {...basic,room:selected,nda:null,sections:allowed.sort((a,b)=>a.order-b.order),images}
 }
-export const overview=query({args:{roomId:v.optional(v.id('rooms'))},handler:async(ctx,args)=>{
+export const overview=query({args:{roomId:v.optional(v.id('rooms')),nonce:v.optional(v.number())},handler:async(ctx,args)=>{
  if(process.env.ADC_CONVEX_PORTAL_ENABLED!=='true')return null
  const user=await identity(ctx)
  return user?await overviewForIdentity(ctx,user,args.roomId):null

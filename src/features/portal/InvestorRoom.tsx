@@ -27,25 +27,32 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
  const sequence=useRef(0)
  const agreed=!!data?.nda&&agreedVersion===data.nda.version
  const roomId=data?.room?.id
- // Recheck authorization periodically and on window focus. Clear the rendered content on failure.
+ // A hidden tab does not poll. Keep one request in flight and bound stale display.
+ const refreshRef=useRef(refresh),busyRef=useRef(busy),verifiedAt=useRef(Date.now())
+ useEffect(()=>{refreshRef.current=refresh;busyRef.current=busy},[refresh,busy])
  useEffect(()=>{
-  let alive=true
-  let misses=0
-  // Access is re-checked often; a transient failure must not wipe the page, but a confirmed loss of access must.
-  async function load(){const token=++sequence.current;try{const next=await refresh(roomId);if(!alive||token!==sequence.current)return;if(next){misses=0;setData(next)}else if(++misses>=2)setData(null);else window.setTimeout(()=>void load(),2500)}catch{/* keep view; retried on next tick */}}
-  const timer=window.setInterval(()=>void load(),30000)
-  const focus=()=>void load()
-  window.addEventListener('focus',focus)
-  return ()=>{alive=false;sequence.current++;window.clearInterval(timer);window.removeEventListener('focus',focus)}
- },[roomId,refresh])
+  let alive=true,inFlight=false,lastStart=Date.now(),blockedUntil=0
+  async function load(){
+   const now=Date.now()
+   if(!alive||inFlight||busyRef.current||document.visibilityState!=='visible'||now<blockedUntil||now-lastStart<60000)return
+   inFlight=true;lastStart=now;const token=++sequence.current
+   try{const next=await refreshRef.current(roomId);if(!alive||token!==sequence.current)return;if(next){verifiedAt.current=Date.now();setData(next)}else setData(null)}
+   catch{blockedUntil=Date.now()+60000}
+   finally{inFlight=false}
+  }
+  const tick=()=>{if(document.visibilityState!=='visible')return;if(Date.now()-verifiedAt.current>=90000){alive=false;sequence.current++;setData(null);return}void load()}
+  const timer=window.setInterval(tick,5000)
+  window.addEventListener('focus',tick);document.addEventListener('visibilitychange',tick)
+  return ()=>{alive=false;sequence.current++;window.clearInterval(timer);window.removeEventListener('focus',tick);document.removeEventListener('visibilitychange',tick)}
+ },[roomId])
  useEffect(()=>{document.documentElement.lang=lang},[lang])
  const title=(s:Section)=>lang==='fr'?s.titleFr:s.titleEn
  const body=(s:Section)=>lang==='fr'?s.bodyFr:s.bodyEn
  const visible=(data?.sections??[]).filter(s=>!search||[title(s),body(s)].some(v=>v.toLocaleLowerCase(lang).includes(search.toLocaleLowerCase(lang))))
  const selected=visible.find(s=>s.id===active)
  const selectedDocument=data?.documents.find(d=>d.id===activeDocument)
- async function reload(){setBusy(true);setError(false);const token=++sequence.current;try{const next=await refresh(roomId);if(token===sequence.current)setData(next)}catch{if(token===sequence.current)setError(true)}finally{setBusy(false)}}
- async function approve(){if(!data?.nda||!roomId||!agreed)return;setBusy(true);setError(false);sequence.current++;try{const r=await acceptNda(roomId,data.nda.version);if(!r.ok)throw new Error('Denied');const token=++sequence.current;const next=await refresh(roomId);if(token===sequence.current)setData(next);setAgreedVersion(null)}catch{setError(true)}finally{setBusy(false)}}
+ async function reload(){setBusy(true);setError(false);const token=++sequence.current;try{const next=await refresh(roomId);if(token===sequence.current){if(next)verifiedAt.current=Date.now();setData(next)}}catch{if(token===sequence.current)setError(true)}finally{setBusy(false)}}
+ async function approve(){if(!data?.nda||!roomId||!agreed)return;setBusy(true);setError(false);sequence.current++;try{const r=await acceptNda(roomId,data.nda.version);if(!r.ok)throw new Error('Denied');const token=++sequence.current;const next=await refresh(roomId);if(token===sequence.current){if(next)verifiedAt.current=Date.now();setData(next)};setAgreedVersion(null)}catch{setError(true)}finally{setBusy(false)}}
  function openSection(id:string){setActive(id);if(roomId&&data?.analytics?.allowed)void engagement({kind:'section',roomId,sectionId:id}).catch(()=>{})}
  async function consent(allowed:boolean){if(!roomId)return;setBusy(true);try{const result=await engagement({kind:'consent',roomId,allowed});if(!result.ok)throw Error('Unavailable');await reload()}catch{setError(true)}finally{setBusy(false)}}
  async function logout(){try{const r=await authClient.signOut();if(r.error)throw new Error('Sign out failed');sequence.current++;setData(null);location.replace('/')}catch{setError(true)}}
