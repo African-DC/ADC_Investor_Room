@@ -53,4 +53,8 @@ it('repeating identical admin invitations preserves the receipt and enqueues onc
  const first=await t.mutation(internal.team.inviteInternal,args)
  expect(await t.mutation(internal.team.inviteInternal,args)).toBe(first)
  expect(await t.run(ctx=>ctx.db.query('emailOutbox').collect())).toHaveLength(1)
+ expect(await t.query(internal.outbox.invitationForDelivery,{key:'admin_invite:'+first,to:args.email})).not.toBeNull()
+ expect(await t.query(internal.outbox.invitationForDelivery,{key:'admin_invite:'+first,to:'other@example.com'})).toBeNull()
+ await t.run(ctx=>ctx.db.patch(first,{revokedAt:Date.now()}))
+ expect(await t.query(internal.outbox.invitationForDelivery,{key:'admin_invite:'+first,to:args.email})).toBeNull()
 })

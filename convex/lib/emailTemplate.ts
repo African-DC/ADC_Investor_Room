@@ -23,7 +23,7 @@ export function magicLinkEmail(siteUrl:string,link:string,admin=false){
  return {subject:'ADC Investor Room — Votre accès vous attend / Your access is waiting',html,text}
 }
 /** Generic branded transactional email (bilingual blocks supplied by caller). */
-export function transactionalEmail(siteUrl:string,o:{kicker:string;title:string;lead:string;cta?:{label:string;path:string};note?:string;en?:string}){
+export function transactionalEmail(siteUrl:string,o:{kicker:string;title:string;lead:string;cta?:{label:string;path:string};secondaryCta?:{label:string;path:string};note?:string;en?:string}){
  const logo=new URL('/adc-logo-mark.png',siteUrl).toString(),href=o.cta?esc(new URL(o.cta.path,siteUrl).toString()):''
  const html=`<!doctype html><html lang="fr"><body style="margin:0;background:#fbf7f2;font-family:Helvetica,Arial,sans-serif;color:#1a0f06">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fbf7f2;padding:32px 12px"><tr><td align="center">
@@ -35,15 +35,20 @@ export function transactionalEmail(siteUrl:string,o:{kicker:string;title:string;
 <h1 style="margin:0 0 14px;font-family:Georgia,serif;font-size:28px;line-height:1.2;color:#1a0f06">${esc(o.title)}</h1>
 <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#6b5d50">${esc(o.lead)}</p>
 ${o.cta?`<a href="${href}" style="display:inline-block;background:#c2410c;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 28px;border-radius:12px">${esc(o.cta.label)} &rarr;</a>`:''}
+${o.secondaryCta?`<p style="margin:20px 0 0;font-size:13px"><a href="${esc(new URL(o.secondaryCta.path,siteUrl).toString())}">${esc(o.secondaryCta.label)}</a></p>`:''}
 ${o.en?`<p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#6b5d50"><em>${esc(o.en)}</em></p>`:''}
 </td></tr>
 <tr><td style="padding:24px 36px 30px;text-align:center"><p style="margin:0;font-size:12px;line-height:1.6;color:#8a7b6d">${esc(o.note??'Message automatique de la Data Room d’African Digit Consulting. Contenu confidentiel.')}</p></td></tr>
 </table></td></tr></table></body></html>`
- const text=[o.kicker,'',o.title,'',o.lead,o.cta?'\n'+o.cta.label+' : '+new URL(o.cta.path,siteUrl).toString():'',o.en?'\n'+o.en:'','',o.note??''].join('\n')
+ const text=[o.kicker,'',o.title,'',o.lead,o.cta?'\n'+o.cta.label+' : '+new URL(o.cta.path,siteUrl).toString():'',o.secondaryCta?'\n'+o.secondaryCta.label+' : '+new URL(o.secondaryCta.path,siteUrl).toString():'',o.en?'\n'+o.en:'','',o.note??''].join('\n')
  return {html,text}
 }
 
 export function otpEmail(siteUrl:string,otp:string){
  if(!/^\d{6}$/.test(otp))throw Error('Invalid code')
  return {subject:'ADC Investor Room — Code de connexion / Sign-in code',...transactionalEmail(siteUrl,{kicker:'CONNEXION ADC · SIGN IN',title:'Votre code de connexion',lead:'Code : '+otp+' — valable 10 minutes, à usage unique. Ne le communiquez à personne.',en:'Your sign-in code is '+otp+'. Valid for 10 minutes, single use. Never share it.',note:'Si vous n’avez pas demandé ce code, ignorez cet e-mail. / If you did not request this code, ignore this email.'})}
+}
+
+export function adminInvitationEmail(siteUrl:string,link:string,expires:string){
+ return {subject:'Invitation — Administration de la Data Room ADC',...transactionalEmail(siteUrl,{kicker:'ADMINISTRATION ADC',title:'Vous êtes invité à administrer la Data Room.',lead:'Votre lien de connexion personnel est valable 15 minutes. Confirmez votre accès puis configurez ou validez votre Authenticator. Votre invitation reste valable jusqu’au '+expires+'.',cta:{label:'Confirmer mon accès administrateur',path:link},secondaryCta:{label:'Lien expiré ? Demander un nouveau code ou lien',path:'/connexion?next=%2Fadmin'},note:'Ne transférez pas ce lien personnel. Si vous n’attendiez pas cette invitation, ignorez cet e-mail.'})}
 }
