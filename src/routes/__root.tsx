@@ -17,7 +17,7 @@ export const Route = createRootRoute({
    {property:'og:image',content:SITE+'/og-image.jpg'},{property:'og:image:secure_url',content:SITE+'/og-image.jpg'},{property:'og:image:type',content:'image/jpeg'},{property:'og:image:width',content:'1200'},{property:'og:image:height',content:'630'},{property:'og:image:alt',content:'ADC Investor Room — Bienvenue chez African Digit Consulting'},
    {name:'twitter:card',content:'summary_large_image'},{name:'twitter:title',content:TITLE},{name:'twitter:description',content:DESCRIPTION},{name:'twitter:image',content:SITE+'/og-image.jpg'},
   ],
-  links:[{rel:'preconnect',href:'https://fonts.googleapis.com'},{rel:'preconnect',href:'https://fonts.gstatic.com',crossOrigin:'anonymous'},{rel:'stylesheet',href:'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Montserrat:wght@400;600;700&family=Poppins:wght@400;500;600;700&display=swap'},{rel:'stylesheet',href:css},{rel:'icon',type:'image/png',sizes:'64x64',href:'/favicon.png'},{rel:'apple-touch-icon',href:'/apple-touch-icon.png'},{rel:'canonical',href:SITE}],
+  links:[{rel:'stylesheet',href:css},{rel:'icon',type:'image/png',sizes:'64x64',href:'/favicon.png'},{rel:'apple-touch-icon',href:'/apple-touch-icon.png'},{rel:'canonical',href:SITE}],
  }),
  component: Root,
  notFoundComponent: NotFound,
