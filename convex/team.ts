@@ -12,11 +12,14 @@ type Cap=typeof CAPS[number]
 const INVITE_TTL=14*86400_000
 const norm=(e:string)=>e.trim().toLowerCase()
 function caps(list:string[]):Cap[]{const out=[...new Set(list)].filter((c):c is Cap=>(CAPS as readonly string[]).includes(c));if(!out.length)throw new Error('Capabilities required');return out}
+export function activeInvites(ctx:QueryCtx|MutationCtx,email:string,now:number){
+ return ctx.db.query('adminInvites').withIndex('by_email_pending_expires',q=>q.eq('email',norm(email)).eq('acceptedAt',undefined).eq('revokedAt',undefined).gt('expiresAt',now))
+}
 async function createInvite(ctx:MutationCtx,roomId:Id<'rooms'>,email:string,capabilities:string[],invitedBy:string){
  const e=norm(email);if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)||e.length>254)throw new Error('Invalid email')
  if(!await ctx.db.get(roomId))throw new Error('Unavailable')
  const requested=caps(capabilities),now=Date.now()
- const pending=(await ctx.db.query('adminInvites').withIndex('by_email',q=>q.eq('email',e)).collect()).filter(prior=>prior.roomId===roomId&&!prior.acceptedAt&&!prior.revokedAt)
+ const pending=(await activeInvites(ctx,e,now).collect()).filter(prior=>prior.roomId===roomId)
  const existing=pending.find(prior=>prior.expiresAt>now&&prior.capabilities.length===requested.length&&requested.every(c=>prior.capabilities.includes(c)))
  if(existing)return existing._id
  for(const prior of pending)await ctx.db.patch(prior._id,{revokedAt:now})
@@ -47,8 +50,7 @@ export const inviteWithReceipt=mutation({args:{roomId:v.id('rooms'),email:v.stri
 export const claim=mutation({args:{},handler:async ctx=>{
  const user=await authComponent.safeGetAuthUser(ctx);if(!user?.emailVerified)return {claimed:0}
  const now=Date.now();let claimed=0
- for(const inv of await ctx.db.query('adminInvites').withIndex('by_email',q=>q.eq('email',norm(user.email))).collect()){
-  if(inv.acceptedAt||inv.revokedAt||inv.expiresAt<=now)continue
+ for(const inv of await activeInvites(ctx,user.email,now).collect()){
   const prior=await ctx.db.query('stagingAdminMemberships').withIndex('by_user_room',q=>q.eq('authUserId',user._id).eq('roomId',inv.roomId)).unique()
   const capabilities=caps(inv.capabilities)
   if(prior)await ctx.db.patch(prior._id,{capabilities:[...new Set([...(prior.revokedAt?[]:prior.capabilities),...capabilities])],revokedAt:undefined})
@@ -60,7 +62,7 @@ export const claim=mutation({args:{},handler:async ctx=>{
 export async function readTeam(ctx:QueryCtx,a:{roomId:Id<'rooms'>},actor:Awaited<ReturnType<typeof admin>>){
  const {user}=actor
  const members=[]
- for(const m of await ctx.db.query('stagingAdminMemberships').collect()){if(m.roomId!==a.roomId)continue;const u=await authComponent.getAnyUserById(ctx,m.authUserId).catch(()=>null);members.push({id:m._id,name:u?.name??'—',email:u?.email??'—',capabilities:m.capabilities,revoked:!!m.revokedAt,self:m.authUserId===user._id})}
+ for(const m of await ctx.db.query('stagingAdminMemberships').withIndex('by_room',q=>q.eq('roomId',a.roomId)).collect()){const u=await authComponent.getAnyUserById(ctx,m.authUserId).catch(()=>null);members.push({id:m._id,name:u?.name??'—',email:u?.email??'—',capabilities:m.capabilities,revoked:!!m.revokedAt,self:m.authUserId===user._id})}
  const invites=(await ctx.db.query('adminInvites').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)).map(i=>viewInvite(i,Date.now()))
  return {members,invites}
 }

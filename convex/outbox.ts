@@ -33,15 +33,15 @@ export async function enqueue(ctx:MutationCtx,o:{key:string;kind:Kind;to:string;
 export async function emailOf(ctx:MutationCtx,authUserId:string){const u=await authComponent.getAnyUserById(ctx,authUserId).catch(()=>null);return u?{email:u.email,name:u.name}:null}
 export async function adminRecipients(ctx:MutationCtx,roomId:Id<'rooms'>){
  const out:{email:string;name:string}[]=[]
- for(const m of await ctx.db.query('stagingAdminMemberships').collect()){if(m.roomId!==roomId||m.revokedAt||!m.capabilities.some(c=>c==='access:manage'||c==='investors:read'))continue;const u=await emailOf(ctx,m.authUserId);if(u)out.push(u)}
+ for(const m of await ctx.db.query('stagingAdminMemberships').withIndex('by_room',q=>q.eq('roomId',roomId)).collect()){if(m.revokedAt||!m.capabilities.some(c=>c==='access:manage'||c==='investors:read'))continue;const u=await emailOf(ctx,m.authUserId);if(u)out.push(u)}
  return out
 }
 export const claim=internalMutation({args:{id:v.id('emailOutbox')},handler:async(ctx,a)=>{
  const row=await ctx.db.get(a.id);if(!row||row.status!=='pending'||row.nextAttemptAt>Date.now()+1000)return null
- await ctx.db.patch(row._id,{status:'sending',attempts:row.attempts+1});return {key:row.key,to:row.to,kind:row.kind,subject:row.subject,html:row.html,text:row.text,attempts:row.attempts+1}
+ await ctx.db.patch(row._id,{status:'sending',attempts:row.attempts+1,nextAttemptAt:Date.now()});return {key:row.key,to:row.to,kind:row.kind,subject:row.subject,html:row.html,text:row.text,attempts:row.attempts+1}
 }})
-export const settle=internalMutation({args:{id:v.id('emailOutbox'),ok:v.boolean(),providerId:v.optional(v.string()),error:v.optional(v.string()),retryable:v.boolean()},handler:async(ctx,a)=>{
- const row=await ctx.db.get(a.id);if(!row)return
+export const settle=internalMutation({args:{id:v.id('emailOutbox'),ok:v.boolean(),providerId:v.optional(v.string()),error:v.optional(v.string()),retryable:v.boolean(),attempt:v.optional(v.number())},handler:async(ctx,a)=>{
+ const row=await ctx.db.get(a.id);if(!row||row.status!=='sending'||(a.attempt!==undefined&&a.attempt!==row.attempts))return
  if(a.ok){await ctx.db.patch(row._id,{status:'sent',sentAt:Date.now(),providerId:a.providerId,lastError:undefined});return}
  const again=a.retryable&&row.attempts<MAX_ATTEMPTS,delay=BACKOFF[Math.min(row.attempts-1,BACKOFF.length-1)]!
  await ctx.db.patch(row._id,{status:again?'pending':'failed',lastError:(a.error??'Erreur inconnue').slice(0,300),nextAttemptAt:Date.now()+delay})
@@ -57,12 +57,12 @@ export const invitationForDelivery=internalQuery({args:{key:v.string(),to:v.stri
 export const deliver=internalAction({args:{id:v.id('emailOutbox')},handler:async(ctx,a)=>{
  const job=await ctx.runMutation(internal.outbox.claim,{id:a.id});if(!job)return
  const key=process.env.RESEND_API_KEY,from=process.env.MAIL_FROM
- if(!key||!from){await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:false,error:'Service e-mail non configuré',retryable:true});return}
+ if(!key||!from){await ctx.runMutation(internal.outbox.settle,{id:a.id,attempt:job.attempts,ok:false,error:'Service e-mail non configuré',retryable:true});return}
  try{
   let content={subject:job.subject,html:job.html,text:job.text},deliveryKey=job.key
   if(job.kind==='admin_invite'&&job.key.startsWith('admin_invite:')){
    const invite=await ctx.runQuery(internal.outbox.invitationForDelivery,{key:job.key,to:job.to})
-   if(!invite){await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:false,error:'Invitation inactive',retryable:false});return}
+   if(!invite){await ctx.runMutation(internal.outbox.settle,{id:a.id,attempt:job.attempts,ok:false,error:'Invitation inactive',retryable:false});return}
    let captured=''
    const auth=createAuth(ctx,async(email,link)=>{if(email!==job.to)throw Error('Unexpected recipient');captured=link})
    await auth.api.signInMagicLink({body:{email:job.to,callbackURL:'/admin',newUserCallbackURL:'/admin',errorCallbackURL:'/connexion?next=%2Fadmin'},headers:new Headers({origin:site()})})
@@ -72,16 +72,16 @@ export const deliver=internalAction({args:{id:v.id('emailOutbox')},handler:async
    deliveryKey=job.key+':'+job.attempts
   }
   const res=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json','Idempotency-Key':deliveryKey.slice(0,256)},body:JSON.stringify({from,to:[job.to],...content}),signal:AbortSignal.timeout(10000)})
-  if(res.ok){const body=await res.json().catch(()=>({}))as {id?:string};await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:true,providerId:body.id,retryable:false});return}
+  if(res.ok){const body=await res.json().catch(()=>({}))as {id?:string};await ctx.runMutation(internal.outbox.settle,{id:a.id,attempt:job.attempts,ok:true,providerId:body.id,retryable:false});return}
   const detail=(await res.text().catch(()=>'')).slice(0,200)
-  await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:false,error:'Resend '+res.status+(detail?' — '+detail:''),retryable:res.status===429||res.status>=500})
- }catch(e){await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:false,error:job.kind==='admin_invite'?'Service de connexion ou d’envoi indisponible':'Réseau : '+String((e as Error).message??e).slice(0,150),retryable:true})}
+  await ctx.runMutation(internal.outbox.settle,{id:a.id,attempt:job.attempts,ok:false,error:'Resend '+res.status+(detail?' — '+detail:''),retryable:res.status===429||res.status>=500})
+ }catch(e){await ctx.runMutation(internal.outbox.settle,{id:a.id,attempt:job.attempts,ok:false,error:job.kind==='admin_invite'?'Service de connexion ou d’envoi indisponible':'Réseau : '+String((e as Error).message??e).slice(0,150),retryable:true})}
 }})
 /** Safety net: re-schedules due pending rows and recovers rows stuck in "sending" (worker crash). */
 export const sweep=internalMutation({args:{},handler:async ctx=>{
  const now=Date.now();let n=0
  for(const r of await ctx.db.query('emailOutbox').withIndex('by_status_next',q=>q.eq('status','pending').lte('nextAttemptAt',now)).take(50)){await ctx.scheduler.runAfter(0,internal.outbox.deliver,{id:r._id});n++}
- for(const r of await ctx.db.query('emailOutbox').withIndex('by_status_next',q=>q.eq('status','sending')).take(50))if(now-r.nextAttemptAt>15*60_000){await ctx.db.patch(r._id,{status:'pending',nextAttemptAt:now});n++}
+ for(const r of await ctx.db.query('emailOutbox') .withIndex('by_status_next',q=>q.eq('status','sending').lt('nextAttemptAt',now-15*60_000)).take(50)){await ctx.db.patch(r._id,{status:'pending',nextAttemptAt:now});await ctx.scheduler.runAfter(0,internal.outbox.deliver,{id:r._id});n++}
  return n
 }})
 export const forRoom=internalQuery({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>ctx.db.query('emailOutbox').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)})

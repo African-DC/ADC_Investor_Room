@@ -16,7 +16,7 @@ import { targetsFor,draftText } from '../features/technical/model'
 import { getTechnicalSnapshot } from '../server/githubReporting'
 import { AdminRoom } from '../features/admin/AdminRoom'
 import { JourneyFrame } from '../features/onboarding/JourneyFrame'
-import { useEffect,useState } from 'react'
+import { useEffect,useState,useCallback } from 'react'
 import { MfaGate } from '../features/admin/MfaGate'
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 // Admin UI is allowed wherever the flag is on: every privileged Convex call enforces session-bound TOTP MFA.
@@ -166,12 +166,18 @@ function SocketAdmin(props:ComponentProps<typeof AdminRoom>){
   try{const result=await client.query(api.admin.sessionCheck,{roomId,nonce:Date.now()});return {kind:'verified',capabilities:result.capabilities}}
   catch(error){const failure=safeAuthFailure(error);return {kind:failure.kind==='mfa-required'||failure.kind==='unauthenticated'?'denied':'temporary'}}
  }
- const subscribeSession:NonNullable<ComponentProps<typeof AdminRoom>['subscribeSession']>=onResult=>{
+ const subscribeSession=useCallback<NonNullable<ComponentProps<typeof AdminRoom>['subscribeSession']>>(onResult=>{
   if(!ready)return ()=>{}
   const watch=client.watchQuery(api.admin.sessionCheck,{roomId})
   const update=()=>{try{const value=watch.localQueryResult();if(value)onResult({kind:'verified',capabilities:value.capabilities})}catch(error){const failure=safeAuthFailure(error);onResult({kind:failure.kind==='mfa-required'||failure.kind==='unauthenticated'?'denied':'temporary'})}}
   const stop=watch.onUpdate(update);update();return stop
- }
+ },[client,ready,roomId])
+ const subscribeEmails=useCallback<NonNullable<ComponentProps<typeof AdminRoom>['subscribeEmails']>>(onResult=>{
+  if(!ready)return ()=>{}
+  const watch=client.watchQuery(api.outbox.list,{roomId})
+  const update=()=>{try{const rows=watch.localQueryResult();if(rows)onResult(rows)}catch{/* permissions checked by session watcher; do not display unverified updates */}}
+  const stop=watch.onUpdate(update);update();return stop
+ },[client,ready,roomId])
  const reload:ComponentProps<typeof AdminRoom>['reload']=async()=>{
   if(!ready)throw Error('Connection unavailable')
   const result=await client.query(api.adminPanels.bootstrap,{roomId,skipClaim:true,nonce:Date.now()})
@@ -179,7 +185,7 @@ function SocketAdmin(props:ComponentProps<typeof AdminRoom>){
   const {identity,dashboard,panels}=result
   return {identity,dashboard:{...props.initial.dashboard,...dashboard,...panels,metrics:panels.metrics??[],contacts:panels.contacts??[],questions:panels.questions??[]}}
  }
- return <AdminRoom {...props} verifySession={verifySession} subscribeSession={subscribeSession} reload={reload}
+ return <AdminRoom {...props} verifySession={verifySession} subscribeSession={subscribeSession} subscribeEmails={subscribeEmails} reload={reload}
    createLink={async input=>{if(!ready)return null;const parsed=linkInput.safeParse({...input,roomId});if(!parsed.success)return null;const data=parsed.data;try{const r=await client.action(api.access.createLink,{...data,roomId});return r?{url:location.origin+'/invite#'+r.token,link:{id:r.id,label:data.label,targets:data.targets,email:data.email?.toLowerCase()??null,startsAt:data.startsAt,expiresAt:data.expiresAt,grantUntil:data.grantUntil??null,maxUses:data.maxUses,uses:0,active:data.startsAt<=Date.now()&&data.expiresAt>Date.now(),revoked:false}}:null}catch{return null}}}
    
    touch={async()=>{if(!ready)throw Error('Connection unavailable');return client.mutation(api.mfa.touch,{})}}

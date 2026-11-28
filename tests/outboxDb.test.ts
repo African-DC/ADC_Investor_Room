@@ -58,3 +58,16 @@ it('repeating identical admin invitations preserves the receipt and enqueues onc
  await t.run(ctx=>ctx.db.patch(first,{revokedAt:Date.now()}))
  expect(await t.query(internal.outbox.invitationForDelivery,{key:'admin_invite:'+first,to:args.email})).toBeNull()
 })
+
+it('recovers a crashed worker without letting a stale attempt overwrite a newer delivery',async()=>{
+ const t=convexTest(schema,modules)
+ const id=(await t.run(ctx=>enqueue(ctx,{key:'lease',kind:'qa_answer',to:'a@b.co',vars:{subject:'Q'}})))!
+ const first=await t.mutation(internal.outbox.claim,{id});expect(first?.attempts).toBe(1)
+ vi.setSystemTime(Date.now()+16*60_000)
+ await t.mutation(internal.outbox.sweep,{})
+ const second=await t.mutation(internal.outbox.claim,{id});expect(second?.attempts).toBe(2)
+ await t.mutation(internal.outbox.settle,{id,attempt:1,ok:false,retryable:false,error:'stale'})
+ expect((await t.run(ctx=>ctx.db.get(id)))?.status).toBe('sending')
+ await t.mutation(internal.outbox.settle,{id,attempt:2,ok:true,retryable:false,providerId:'sent'})
+ expect((await t.run(ctx=>ctx.db.get(id)))?.status).toBe('sent')
+})
