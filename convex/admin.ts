@@ -22,7 +22,7 @@ export async function admin(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,capabili
 }
 /** Lightweight read-only heartbeat. The same room membership and session-bound MFA gate
  * is enforced as for every privileged operation. No renewal or confidential records. */
-export const sessionCheck=query({args:{roomId:v.id('rooms')},returns:v.object({capabilities:v.array(cap)}),handler:async(ctx,a)=>{
+export const sessionCheck=query({args:{roomId:v.id('rooms'),nonce:v.optional(v.number())},returns:v.object({capabilities:v.array(cap)}),handler:async(ctx,a)=>{
  const {membership}=await admin(ctx,a.roomId)
  return {capabilities:membership.capabilities}
 }})

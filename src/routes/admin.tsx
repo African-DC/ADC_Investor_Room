@@ -8,6 +8,10 @@ import { safeAuthFailure } from '../lib/auth-token'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { adminCommand } from '../features/admin/contracts'
+import {executeCommand} from '../features/admin/executeCommand'
+import {LiveConvex,liveConvexEnabled} from '../lib/LiveConvex'
+import {useConvex,useConvexAuth} from 'convex/react'
+import type {ComponentProps} from 'react'
 import { targetsFor,draftText } from '../features/technical/model'
 import { getTechnicalSnapshot } from '../server/githubReporting'
 import { AdminRoom } from '../features/admin/AdminRoom'
@@ -60,41 +64,7 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge(),origin=process.env.ADC_APP_ORIGIN
  if(!bridge||!adminAllowed()||!origin||getRequestHeader('origin')!==origin)return {ok:false}
- const roomId=data.roomId as Id<'rooms'>
- try{
-  switch(data.kind){
-   case 'financeDraft':await bridge.fetchAuthMutation(api.finance.draft,{roomId,sectionId:data.sectionId as Id<'sections'>,kind:data.metricKind,scope:data.scope,periodStart:data.periodStart,periodEnd:data.periodEnd,definitionFr:data.definitionFr,definitionEn:data.definitionEn,value:data.value,unit:data.unit,evidenceVersionIds:data.evidenceVersionIds as Id<'documentVersions'>[]});break
-   case 'financeTransition':await bridge.fetchAuthMutation(api.finance.transition,{roomId,metricId:data.metricId as Id<'financialMetrics'>,action:data.action});break
-   case 'documentTransition':if(data.action==='publish')await bridge.fetchAuthMutation(api.documents.adminPublish,{roomId,documentId:data.documentId as Id<'documents'>});else await bridge.fetchAuthMutation(api.documents.adminArchive,{roomId,documentId:data.documentId as Id<'documents'>});break
-   case 'crmUpdate':await bridge.fetchAuthMutation(api.crm.update,{roomId,profileId:data.profileId as Id<'investorProfiles'>,stage:data.stage,nextAction:data.nextAction,dueDate:data.dueDate,assignToMe:data.assignToMe,expectedRevision:data.expectedRevision});break
-   case 'crmNote':await bridge.fetchAuthMutation(api.crm.note,{roomId,profileId:data.profileId as Id<'investorProfiles'>,text:data.text});break
-   case 'qaReply':await bridge.fetchAuthMutation(api.qa.adminReply,{roomId,questionId:data.questionId as Id<'questions'>,body:data.body});break
-   case 'qaClose':await bridge.fetchAuthMutation(api.qa.close,{roomId,questionId:data.questionId as Id<'questions'>});break
-   case 'grant':await bridge.fetchAuthMutation(api.admin.grant,{roomId,profileId:data.profileId as Id<'investorProfiles'>,capability:data.capability,sectionId:data.sectionId as Id<'sections'>|undefined,effect:data.effect,expiresAt:data.expiresAt});break
-   case 'grantDocument':await bridge.fetchAuthMutation(api.admin.grantDocument,{roomId,profileId:data.profileId as Id<'investorProfiles'>,documentId:data.documentId as Id<'documents'>,capability:data.capability,effect:data.effect,expiresAt:data.expiresAt});break
-   case 'revoke':await bridge.fetchAuthMutation(api.admin.revoke,{roomId,grantId:data.grantId as Id<'accessGrants'>});break
-   case 'draft':{const {kind,roomId:_,...fields}=data;void kind;void _;await bridge.fetchAuthMutation(api.admin.draft,{...fields,roomId});break}
-   case 'transition':await bridge.fetchAuthMutation(api.admin.transition,{roomId,versionId:data.versionId as Id<'sectionVersions'>,action:data.action});break
-   case 'setAccess':await bridge.fetchAuthMutation(api.access.setAccess,{roomId,profileIds:data.profileIds as Id<'investorProfiles'>[],targets:data.targets,effect:data.effect,startsAt:data.startsAt,expiresAt:data.expiresAt,groupId:data.groupId as Id<'investorGroups'>|undefined});break
-   case 'revokeMany':await bridge.fetchAuthMutation(api.access.revokeMany,{roomId,grantIds:data.grantIds as Id<'accessGrants'>[]});break
-   case 'saveGroup':await bridge.fetchAuthMutation(api.access.saveGroup,{roomId,groupId:data.groupId as Id<'investorGroups'>|undefined,name:data.name,profileIds:data.profileIds as Id<'investorProfiles'>[]});break
-   case 'deleteGroup':await bridge.fetchAuthMutation(api.access.deleteGroup,{roomId,groupId:data.groupId as Id<'investorGroups'>});break
-   case 'roomCreate':return {ok:true,roomCreatedId:await bridge.fetchAuthMutation(api.admin.createRoom,{roomId,name:data.name,description:data.description})}
-   case 'roomUpdate':return {ok:true,roomUpdated:await bridge.fetchAuthMutation(api.admin.updateRoom,{roomId,name:data.name,description:data.description})}
-   case 'roomStatus':await bridge.fetchAuthMutation(api.access.setRoomStatus,{roomId,status:data.status});break
-   case 'manualReview':await bridge.fetchAuthMutation(api.documents.attestManualReview,{roomId,documentId:data.documentId as Id<'documents'>,sha256:data.sha256,verdict:data.verdict});break
-   case 'teamInvite':return {ok:true,invite:await bridge.fetchAuthMutation(api.team.inviteWithReceipt,{roomId,email:data.email,capabilities:data.capabilities})}
-   case 'teamSetCaps':await bridge.fetchAuthMutation(api.team.setCapabilities,{roomId,membershipId:data.membershipId as Id<'stagingAdminMemberships'>,capabilities:data.capabilities});break
-   case 'teamRevoke':await bridge.fetchAuthMutation(api.team.revokeMember,{roomId,membershipId:data.membershipId as Id<'stagingAdminMemberships'>});break
-   case 'teamRevokeInvite':await bridge.fetchAuthMutation(api.team.revokeInvite,{roomId,inviteId:data.inviteId as Id<'adminInvites'>});break
-   case 'retryEmail':await bridge.fetchAuthMutation(api.outbox.retry,{roomId,id:data.emailId as Id<'emailOutbox'>});break
-   case 'ndaPublish':await bridge.fetchAuthMutation(api.nda.publish,{roomId,textFr:data.textFr,textEn:data.textEn});break
-   case 'ndaRemove':await bridge.fetchAuthMutation(api.nda.remove,{roomId});break
-   case 'revokeLink':await bridge.fetchAuthMutation(api.access.revokeLink,{roomId,linkId:data.linkId as Id<'accessLinks'>});break
-   case 'archive':await bridge.fetchAuthMutation(api.admin.archive,{roomId,sectionId:data.sectionId as Id<'sections'>});break
-  }
-  return {ok:true}
- }catch(error){const failure=safeAuthFailure(error);console.warn('[adc:admin] command failed',{command:data.kind,...failure});return {ok:false,reason:error instanceof Error&&error.message.includes('Room name already used')?'room-name-used':failure.kind}}
+ return executeCommand(bridge,data)
 })
 const history=createServerFn({method:'GET'}).validator(z.object({roomId:z.string().max(128),profileId:z.string().max(128)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
@@ -191,4 +161,33 @@ function AdminProblem({problem}:{problem:'signin'|'membership'|'unavailable'|'th
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/connexion',search:{next:'/admin'}});return {state}
 },component:Page})
-function Page(){const {state}=Route.useRouteContext();if(state.problem)return <AdminProblem problem={state.problem}/>;if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminRoom uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} verifySession={()=>verifySession({data:{roomId:state.dashboard.room.id}})} touch={()=>touch()} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});if(next?.problem==='throttled')throw Error('rate-limit');if(next?.problem==='unavailable')throw Error('Temporary refresh failure');return next&&!next.mfa&&!next.problem?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
+function Page(){const {state}=Route.useRouteContext();if(state.problem)return <AdminProblem problem={state.problem}/>;if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminTransport uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} verifySession={()=>verifySession({data:{roomId:state.dashboard.room.id}})} touch={()=>touch()} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});if(next?.problem==='throttled')throw Error('rate-limit');if(next?.problem==='unavailable')throw Error('Temporary refresh failure');return next&&!next.mfa&&!next.problem?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
+function AdminTransport(props:ComponentProps<typeof AdminRoom>){
+ if(!liveConvexEnabled())return <AdminRoom {...props}/>
+ return <LiveConvex><SocketAdmin {...props}/></LiveConvex>
+}
+function SocketAdmin(props:ComponentProps<typeof AdminRoom>){
+ const client=useConvex(),auth=useConvexAuth(),roomId=props.initial.dashboard.room.id as Id<'rooms'>
+ const ready=auth.isAuthenticated&&!auth.isLoading
+ const verifySession:NonNullable<ComponentProps<typeof AdminRoom>['verifySession']>=async()=>{
+  if(!ready)return {kind:'temporary'}
+  try{const result=await client.query(api.admin.sessionCheck,{roomId,nonce:Date.now()});return {kind:'verified',capabilities:result.capabilities}}
+  catch(error){const failure=safeAuthFailure(error);return {kind:failure.kind==='mfa-required'||failure.kind==='unauthenticated'?'denied':'temporary'}}
+ }
+ const subscribeSession:NonNullable<ComponentProps<typeof AdminRoom>['subscribeSession']>=onResult=>{
+  if(!ready)return ()=>{}
+  const watch=client.watchQuery(api.admin.sessionCheck,{roomId})
+  const update=()=>{try{const value=watch.localQueryResult();if(value)onResult({kind:'verified',capabilities:value.capabilities})}catch(error){const failure=safeAuthFailure(error);onResult({kind:failure.kind==='mfa-required'||failure.kind==='unauthenticated'?'denied':'temporary'})}}
+  const stop=watch.onUpdate(update);update();return stop
+ }
+ const reload:ComponentProps<typeof AdminRoom>['reload']=async()=>{
+  if(!ready)throw Error('Connection unavailable')
+  const identity=await client.query(api.admin.rooms,{})
+  if(!identity||!identity.rooms.some(r=>r.id===roomId))return null
+  const [dashboard,panels]=await Promise.all([client.query(api.admin.dashboard,{roomId}),client.query(api.adminPanels.overview,{roomId})])
+  return {identity,dashboard:{...props.initial.dashboard,...dashboard,...panels,metrics:panels.metrics??[],contacts:panels.contacts??[],questions:panels.questions??[]}}
+ }
+ return <AdminRoom {...props} verifySession={verifySession} subscribeSession={subscribeSession} reload={reload}
+   touch={async()=>{if(!ready)throw Error('Connection unavailable');return client.mutation(api.mfa.touch,{})}}
+   command={async data=>{if(!ready)return {ok:false,reason:'connection-pending'};return executeCommand({fetchAuthMutation:(m,args)=>client.mutation(m,args)},data)}}/>
+}
