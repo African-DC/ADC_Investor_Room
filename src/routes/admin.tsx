@@ -100,7 +100,7 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
    case 'archive':await bridge.fetchAuthMutation(api.admin.archive,{roomId,sectionId:data.sectionId as Id<'sections'>});break
   }
   return {ok:true}
- }catch(error){console.warn('[adc:admin] command failed',{kind:data.kind,...safeAuthFailure(error)});return {ok:false}}
+ }catch(error){console.warn('[adc:admin] command failed',{command:data.kind,...safeAuthFailure(error)});return {ok:false}}
 })
 const history=createServerFn({method:'GET'}).validator(z.object({roomId:z.string().max(128),profileId:z.string().max(128)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
