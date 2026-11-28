@@ -29,6 +29,8 @@ const dictionary={fr:{private:'ESPACE INVESTISSEUR',welcome:'Bienvenue',overview
 type Locale=keyof typeof dictionary
 export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSend,engagement,intelligence}:{initial:Overview;refresh:(roomId?:string)=>Promise<Overview|null>;acceptNda:(roomId:string,version:string)=>Promise<{ok:boolean}>;questionRead:(roomId:string,id:string)=>Promise<Thread|null>;questionSend:(roomId:string,a:QuestionAction)=>Promise<{ok:boolean}>;intelligence:(a:{roomId:string;question:string;lang:Locale;externalConsent:boolean})=>Promise<Answer>;engagement:(a:{kind:'consent';roomId:string;allowed:boolean}|{kind:'section';roomId:string;sectionId:string})=>Promise<{ok:boolean}>}){
  const [lang,setLang]=useState<Locale>('fr'),[data,setData]=useState<Overview|null>(initial),[search,setSearch]=useState(''),[active,setActive]=useState<string|null>(null),[activeDocument,setActiveDocument]=useState<string|null>(null),[agreedVersion,setAgreedVersion]=useState<string|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(false),[menu,setMenu]=useState(false)
+ const [hydrated,setHydrated]=useState(false)
+ useEffect(()=>{setHydrated(true)},[])
  const t=dictionary[lang]
  const sequence=useRef(0)
  const agreed=!!data?.nda&&agreedVersion===data.nda.version
@@ -70,7 +72,7 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
  if(!data)return <JourneyFrame lang={lang} setLang={setLang} tone="alert"><div className="frame-emblem is-alert"><LockKeyhole size={30} aria-hidden="true"/></div><h1>{fr?'Session interrompue.':'Session ended.'}</h1><p role="alert" className="frame-lead">{t.expired}</p><a className="primary journey-primary" href="/">{fr?'Se reconnecter':'Sign in again'}<ArrowRight size={19}/></a></JourneyFrame>
  const navItem=(s:Section)=>{const b=brandFor(s.slug),Icon=categoryIcon(s.category);return <button key={s.id} className={'dr-nav-item'+(active===s.id?' is-active':'')} aria-current={active===s.id?'page':undefined} onClick={()=>go(s.id)} {...brandStyle(s.slug)}>{b?<img src={b.logo} alt="" width={22} height={22}/>:<Icon size={18} aria-hidden="true"/>}<span>{title(s)}</span></button>}
  return <div className={'dr'+(menu?' menu-open':'')}>
-  <aside className="dr-side" aria-label={t.room}>
+  <aside className="dr-side" id="adc-investor-navigation" aria-label={t.room}>
    <a className="dr-brand" href="/investor"><img src="/adc-logo-mark.png" alt="African Digit Consulting"/></a>
    <div className="dr-room"><span className="dr-label">{t.room}</span>{data.rooms.length>1?<select aria-label={t.choose} value={roomId??''} onChange={e=>location.assign('/investor?roomId='+encodeURIComponent(e.target.value))}><option value="" disabled>{t.choose}</option>{data.rooms.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select>:<strong>{data.room?.name??'—'}</strong>}</div>
    <nav className="dr-nav">
@@ -82,7 +84,7 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
   <button className="dr-scrim" aria-label={fr?'Fermer le menu':'Close menu'} onClick={()=>setMenu(false)} tabIndex={menu?0:-1}/>
   <main className="dr-main">
    <header className="dr-top">
-    <button className="dr-icon dr-menu" aria-label={fr?'Ouvrir le menu':'Open menu'} aria-expanded={menu} onClick={()=>setMenu(true)}><Menu size={20}/></button>
+    <button className="dr-icon dr-menu" aria-label={fr?'Ouvrir le menu':'Open menu'} aria-expanded={menu} aria-controls="adc-investor-navigation" disabled={!hydrated} onClick={()=>setMenu(true)}><Menu size={20}/></button>
     <nav className="dr-crumbs" aria-label={fr?'Fil d’Ariane':'Breadcrumb'}><LockKeyhole size={14} aria-hidden="true"/><button onClick={()=>go(null)}>{data.room?.name??t.private}</button>{selected&&<><ChevronRight size={14} aria-hidden="true"/><span>{title(selected)}</span></>}</nav>
     <div className="dr-actions"><button className="dr-icon" onClick={()=>void reload()} disabled={busy} aria-label={t.refresh} title={t.refresh}><RefreshCw size={17} className={busy?'spin':''}/></button><button className="dr-pill" onClick={()=>setLang(l=>l==='fr'?'en':'fr')}><Globe2 size={16}/>{t.language}</button></div>
    </header>
