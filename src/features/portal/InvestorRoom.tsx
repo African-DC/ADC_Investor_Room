@@ -1,21 +1,27 @@
-import { useEffect,useRef,useState } from 'react'
+import { useEffect,useRef,useState,lazy } from 'react'
+import { DeferredPanel } from '../../components/ui/DeferredPanel'
 import { Building2,LockKeyhole,ArrowRight,ArrowLeft,LogOut,Globe2,FileText,RefreshCw,LayoutDashboard,Menu,ChevronRight,Hourglass,ShieldCheck,Inbox,Eye,Download,Boxes,TrendingUp,Landmark,Rocket,Users,Cpu,Scale,FolderLock } from 'lucide-react'
 import { JourneyFrame } from '../onboarding/JourneyFrame'
 import { OverlayHost } from '@ui-sdk/react/overlays'
-import { BlockView } from '../blocks/BlockView'
+
 import { parseBlocks } from '../blocks/schema'
 import type { Block } from '../blocks/schema'
 import { SearchField } from '../../components/ui/SearchField'
-import { IntelligencePanel } from '../intelligence/IntelligencePanel'
+
 import type { Answer } from '../intelligence/retrieval'
-import { Questions } from '../qa/Questions'
+
 import type { Question,Thread,QuestionAction } from '../qa/Questions'
-import { PdfReader } from '../documents/PdfReader'
-import { FinanceView } from '../finance/FinanceView'
+
+
 import type { MetricView } from '../finance/FinanceView'
 import { authClient } from '../../lib/auth-client'
 import { brandFor } from '../brand/products'
 import type { CSSProperties } from 'react'
+const BlockView=lazy(()=>import('../blocks/BlockView').then(m=>({default:m.BlockView})))
+const IntelligencePanel=lazy(()=>import('../intelligence/IntelligencePanel').then(m=>({default:m.IntelligencePanel})))
+const Questions=lazy(()=>import('../qa/Questions').then(m=>({default:m.Questions})))
+const PdfReader=lazy(()=>import('../documents/PdfReader').then(m=>({default:m.PdfReader})))
+const FinanceView=lazy(()=>import('../finance/FinanceView').then(m=>({default:m.FinanceView})))
 type Section={id:string;versionId:string;slug?:string;blocksFr?:string|null;blocksEn?:string|null;titleFr:string;titleEn:string;bodyFr:string;bodyEn:string;category:string;order:number;publishedAt:number}
 type DocumentItem={id:string;titleFr:string;titleEn:string;category:string;version:number;sizeBytes:number;download:boolean}
 export type Overview={name:string;rooms:{id:string;name:string}[];room:{id:string;name:string}|null;nda:{version:string;textFr:string;textEn:string}|null;sections:Section[];images?:Record<string,{src:string;width:number;height:number}>;documents:DocumentItem[];metrics:MetricView[];qaEnabled:boolean;questions:Question[];analytics:{allowed:boolean}|null;aiEnabled:boolean;aiExternal:boolean}
@@ -23,6 +29,8 @@ const dictionary={fr:{private:'ESPACE INVESTISSEUR',welcome:'Bienvenue',overview
 type Locale=keyof typeof dictionary
 export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSend,engagement,intelligence}:{initial:Overview;refresh:(roomId?:string)=>Promise<Overview|null>;acceptNda:(roomId:string,version:string)=>Promise<{ok:boolean}>;questionRead:(roomId:string,id:string)=>Promise<Thread|null>;questionSend:(roomId:string,a:QuestionAction)=>Promise<{ok:boolean}>;intelligence:(a:{roomId:string;question:string;lang:Locale;externalConsent:boolean})=>Promise<Answer>;engagement:(a:{kind:'consent';roomId:string;allowed:boolean}|{kind:'section';roomId:string;sectionId:string})=>Promise<{ok:boolean}>}){
  const [lang,setLang]=useState<Locale>('fr'),[data,setData]=useState<Overview|null>(initial),[search,setSearch]=useState(''),[active,setActive]=useState<string|null>(null),[activeDocument,setActiveDocument]=useState<string|null>(null),[agreedVersion,setAgreedVersion]=useState<string|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(false),[menu,setMenu]=useState(false)
+ const [hydrated,setHydrated]=useState(false)
+ useEffect(()=>{setHydrated(true)},[])
  const t=dictionary[lang]
  const sequence=useRef(0)
  const agreed=!!data?.nda&&agreedVersion===data.nda.version
@@ -64,7 +72,7 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
  if(!data)return <JourneyFrame lang={lang} setLang={setLang} tone="alert"><div className="frame-emblem is-alert"><LockKeyhole size={30} aria-hidden="true"/></div><h1>{fr?'Session interrompue.':'Session ended.'}</h1><p role="alert" className="frame-lead">{t.expired}</p><a className="primary journey-primary" href="/">{fr?'Se reconnecter':'Sign in again'}<ArrowRight size={19}/></a></JourneyFrame>
  const navItem=(s:Section)=>{const b=brandFor(s.slug),Icon=categoryIcon(s.category);return <button key={s.id} className={'dr-nav-item'+(active===s.id?' is-active':'')} aria-current={active===s.id?'page':undefined} onClick={()=>go(s.id)} {...brandStyle(s.slug)}>{b?<img src={b.logo} alt="" width={22} height={22}/>:<Icon size={18} aria-hidden="true"/>}<span>{title(s)}</span></button>}
  return <div className={'dr'+(menu?' menu-open':'')}>
-  <aside className="dr-side" aria-label={t.room}>
+  <aside className="dr-side" id="adc-investor-navigation" aria-label={t.room}>
    <a className="dr-brand" href="/investor"><img src="/adc-logo-mark.png" alt="African Digit Consulting"/></a>
    <div className="dr-room"><span className="dr-label">{t.room}</span>{data.rooms.length>1?<select aria-label={t.choose} value={roomId??''} onChange={e=>location.assign('/investor?roomId='+encodeURIComponent(e.target.value))}><option value="" disabled>{t.choose}</option>{data.rooms.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select>:<strong>{data.room?.name??'—'}</strong>}</div>
    <nav className="dr-nav">
@@ -76,7 +84,7 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
   <button className="dr-scrim" aria-label={fr?'Fermer le menu':'Close menu'} onClick={()=>setMenu(false)} tabIndex={menu?0:-1}/>
   <main className="dr-main">
    <header className="dr-top">
-    <button className="dr-icon dr-menu" aria-label={fr?'Ouvrir le menu':'Open menu'} aria-expanded={menu} onClick={()=>setMenu(true)}><Menu size={20}/></button>
+    <button className="dr-icon dr-menu" aria-label={fr?'Ouvrir le menu':'Open menu'} aria-expanded={menu} aria-controls="adc-investor-navigation" disabled={!hydrated} onClick={()=>setMenu(true)}><Menu size={20}/></button>
     <nav className="dr-crumbs" aria-label={fr?'Fil d’Ariane':'Breadcrumb'}><LockKeyhole size={14} aria-hidden="true"/><button onClick={()=>go(null)}>{data.room?.name??t.private}</button>{selected&&<><ChevronRight size={14} aria-hidden="true"/><span>{title(selected)}</span></>}</nav>
     <div className="dr-actions"><button className="dr-icon" onClick={()=>void reload()} disabled={busy} aria-label={t.refresh} title={t.refresh}><RefreshCw size={17} className={busy?'spin':''}/></button><button className="dr-pill" onClick={()=>setLang(l=>l==='fr'?'en':'fr')}><Globe2 size={16}/>{t.language}</button></div>
    </header>
@@ -86,9 +94,9 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
    :selected?<article key={selected.id} className="dr-article" {...brandStyle(selected.slug)}>
      <button className="dr-back" onClick={()=>go(null)}><ArrowLeft size={15}/>{t.overview}</button>
      <header className="dr-article-head">{brandFor(selected.slug)?<img className="dr-article-logo" src={brandFor(selected.slug)!.logo} alt="" width={84} height={84}/>:<span className="dr-article-icon">{(()=>{const I=categoryIcon(selected.category);return <I size={30}/>})()}</span>}<div><p className="journey-kicker">{categoryLabel(selected.category,lang)}</p><h1>{title(selected)}</h1><p className="dr-muted">{t.published} {date(selected.publishedAt)}</p></div></header>
-     {(()=>{const blocks=safeBlocks(lang==='fr'?selected.blocksFr:selected.blocksEn??selected.blocksFr);return blocks?<BlockView blocks={blocks} lang={lang} documents={data.documents} images={data.images??{}} openDocument={id=>setActiveDocument(id)}/>:<div className="dr-prose">{body(selected)}</div>})()}
-     {selectedDocument&&data.room&&<PdfReader key={selectedDocument.id+'-'+selectedDocument.version} roomId={data.room.id} documentId={selectedDocument.id} title={fr?selectedDocument.titleFr:selectedDocument.titleEn} viewer={data.name} lang={lang} onClose={()=>setActiveDocument(null)}/>}
-     {data.metrics.some(m=>m.sectionId===selected.id)&&<FinanceView metrics={data.metrics.filter(m=>m.sectionId===selected.id)} lang={lang}/>}
+     {(()=>{const blocks=safeBlocks(lang==='fr'?selected.blocksFr:selected.blocksEn??selected.blocksFr);return blocks?<DeferredPanel lang={lang}><BlockView blocks={blocks} lang={lang} documents={data.documents} images={data.images??{}} openDocument={id=>setActiveDocument(id)}/></DeferredPanel>:<div className="dr-prose">{body(selected)}</div>})()}
+     {selectedDocument&&data.room&&<DeferredPanel lang={lang}><PdfReader key={selectedDocument.id+'-'+selectedDocument.version} roomId={data.room.id} documentId={selectedDocument.id} title={fr?selectedDocument.titleFr:selectedDocument.titleEn} viewer={data.name} lang={lang} onClose={()=>setActiveDocument(null)}/></DeferredPanel>}
+     {data.metrics.some(m=>m.sectionId===selected.id)&&<DeferredPanel lang={lang}><FinanceView metrics={data.metrics.filter(m=>m.sectionId===selected.id)} lang={lang}/></DeferredPanel>}
      <nav className="dr-pager">{index>0?<button onClick={()=>go(sections[index-1].id)}><ArrowLeft size={16}/><span><small>{fr?'Précédent':'Previous'}</small>{title(sections[index-1])}</span></button>:<span/>}{index<sections.length-1&&<button className="next" onClick={()=>go(sections[index+1].id)}><span><small>{fr?'Suivant':'Next'}</small>{title(sections[index+1])}</span><ArrowRight size={16}/></button>}</nav>
     </article>
    :<div className="dr-overview">
@@ -100,10 +108,10 @@ export function InvestorRoom({initial,refresh,acceptNda,questionRead,questionSen
        <span className="dr-card-cat">{categoryLabel(s.category,lang)}</span><span className="dr-card-title">{title(s)}</span><span className="dr-card-text">{excerpt(s,lang)}</span><span className="dr-card-go">{fr?'Découvrir':'Explore'}<ArrowRight size={15}/></span></button>})}</div></section>
      :<section className="dr-empty small"><Inbox size={28} aria-hidden="true"/><p>{search?t.none:t.empty}</p></section>}
      {!search&&data.documents.length>0&&<section><h2 className="dr-h2">{fr?'Documents autorisés':'Authorized documents'}</h2><ul className="dr-docs">{data.documents.map(doc=>{const href='/api/documents/file?roomId='+encodeURIComponent(data.room!.id)+'&documentId='+encodeURIComponent(doc.id);return <li key={doc.id}><span className="dr-doc-icon" aria-hidden="true"><FileText size={20}/><small>PDF</small></span><div><strong>{fr?doc.titleFr:doc.titleEn}</strong><span>{categoryLabel(doc.category,lang)} · v{doc.version} · {formatSize(doc.sizeBytes,lang)}</span></div><div className="dr-doc-actions"><button className="dr-btn" onClick={()=>setActiveDocument(doc.id)}><Eye size={16}/>{fr?'Consulter':'View'}</button>{doc.download&&<a className="dr-btn ghost" href={href+'&download=1'}><Download size={16}/>{fr?'Télécharger':'Download'}</a>}</div></li>})}</ul></section>}
-     {selectedDocument&&data.room&&!search&&<PdfReader key={selectedDocument.id+'-'+selectedDocument.version} roomId={data.room.id} documentId={selectedDocument.id} title={fr?selectedDocument.titleFr:selectedDocument.titleEn} viewer={data.name} lang={lang} onClose={()=>setActiveDocument(null)}/>}
-     {!search&&<FinanceView metrics={data.metrics} lang={lang}/>}
-     {data.aiEnabled&&data.room&&!search&&!selectedDocument&&<IntelligencePanel key={data.room.id+':'+lang+':'+JSON.stringify([data.sections.map(s=>[s.id,s.versionId]),data.metrics.map(m=>m.id)])} lang={lang} external={data.aiExternal} ask={(question,externalConsent)=>intelligence({roomId:data.room!.id,question,lang,externalConsent})} open={id=>go(id)}/>}
-     {data.qaEnabled&&data.room&&!search&&!selectedDocument&&<Questions items={data.questions} lang={lang} read={id=>questionRead(data.room!.id,id)} send={async a=>{const result=await questionSend(data.room!.id,a);if(result.ok)await reload();return result}}/>}
+     {selectedDocument&&data.room&&!search&&<DeferredPanel lang={lang}><PdfReader key={selectedDocument.id+'-'+selectedDocument.version} roomId={data.room.id} documentId={selectedDocument.id} title={fr?selectedDocument.titleFr:selectedDocument.titleEn} viewer={data.name} lang={lang} onClose={()=>setActiveDocument(null)}/></DeferredPanel>}
+     {!search&&data.metrics.length>0&&<DeferredPanel lang={lang}><FinanceView metrics={data.metrics} lang={lang}/></DeferredPanel>}
+     {data.aiEnabled&&data.room&&!search&&!selectedDocument&&<DeferredPanel lang={lang}><IntelligencePanel key={data.room.id+':'+lang+':'+JSON.stringify([data.sections.map(s=>[s.id,s.versionId]),data.metrics.map(m=>m.id)])} lang={lang} external={data.aiExternal} ask={(question,externalConsent)=>intelligence({roomId:data.room!.id,question,lang,externalConsent})} open={id=>go(id)}/></DeferredPanel>}
+     {data.qaEnabled&&data.room&&!search&&!selectedDocument&&<DeferredPanel lang={lang}><Questions items={data.questions} lang={lang} read={id=>questionRead(data.room!.id,id)} send={async a=>{const result=await questionSend(data.room!.id,a);if(result.ok)await reload();return result}}/></DeferredPanel>}
      {data.analytics&&<section className="dr-consent"><label className="dr-switch"><input type="checkbox" role="switch" checked={data.analytics.allowed} disabled={busy} onChange={e=>void consent(e.target.checked)}/><span aria-hidden="true"/>{fr?'Autoriser les statistiques facultatives de consultation':'Allow optional engagement analytics'}</label><p>{fr?'Facultatif, sans impact sur vos accès. Mesure par jour, sans durée ni adresse IP. Retrait possible à tout moment ; historique conservé au maximum 90 jours.':'Optional, does not affect access. Daily counts, no duration or IP. Withdraw anytime; history retained up to 90 days.'}</p></section>}
     </div>}
    <footer className="dr-foot"><span><LockKeyhole size={13}/>{fr?'Contenu confidentiel — ne pas diffuser':'Confidential — do not distribute'}</span><span>African Digit Consulting © 2026</span></footer>

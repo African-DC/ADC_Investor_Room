@@ -1,23 +1,24 @@
-import { useEffect,useRef,useState } from 'react'
+import { useEffect,useRef,useState,lazy } from 'react'
+import { DeferredPanel } from '../../components/ui/DeferredPanel'
 import { authClient } from '../../lib/auth-client'
 import { sameCapabilities,canVerify,MAX_UNVERIFIED_MS,TOUCH_INTERVAL_MS } from './sessionPolicy'
-import { Questions } from '../qa/Questions'
+
 import type { Question,Thread } from '../qa/Questions'
-import { TechnicalPanel } from '../technical/TechnicalPanel'
+
 import type { TechnicalResult } from '../technical/TechnicalPanel'
-import { AnalyticsPanel } from '../analytics/AnalyticsPanel'
+
 import type { AnalyticsResult } from '../analytics/AnalyticsPanel'
-import { CrmBoard } from '../crm/CrmBoard'
+
 import type { Contact,HistoryEvent } from '../crm/CrmBoard'
-import { FinanceEditor } from './FinanceEditor'
-import { PageEditor } from '../blocks/PageEditor'
-import { AccessManager } from './AccessManager'
-import { DocumentsPanel } from './DocumentsPanel'
-import { TeamPanel } from './TeamPanel'
-import { RoomSettings } from './RoomSettings'
+
+
+
+
+
+
 import type { Invite } from './TeamPanel'
-import { EmailLog } from './EmailLog'
-import { NdaPanel } from './NdaPanel'
+
+
 import type { NdaState } from './NdaPanel'
 import { LayoutDashboard,PanelsTopLeft,FolderLock,KeyRound,Contact2,MessagesSquare,Landmark,BarChart3,GitBranch,ShieldCheck,ShieldAlert,LogOut,Menu,Search,Eye,FileText,FileClock,Globe2,UserPlus,Users,Link2,ChevronRight,CheckCircle2,PenLine,UsersRound,Mails,FileSignature } from 'lucide-react'
 import { Dialog,DialogBackdrop,DialogContent,DialogShortcut,DialogTitle,DialogTrigger } from '@ui-sdk/react/dialog'
@@ -28,6 +29,18 @@ import { OverlayHost } from '@ui-sdk/react/overlays'
 const success:Record<string,string>={draft:'Brouillon enregistré',transition:'Statut de la page mis à jour',archive:'Page retirée de la salle',setAccess:'Droits appliqués',revokeMany:'Droits révoqués',saveGroup:'Groupe enregistré',deleteGroup:'Groupe supprimé',roomStatus:'Statut de la salle mis à jour',revokeLink:'Lien révoqué',teamInvite:'Invitation créée',teamSetCaps:'Rôles mis à jour',teamRevoke:'Administrateur révoqué',teamRevokeInvite:'Invitation annulée',retryEmail:'Nouvel envoi programmé',ndaPublish:'Nouvelle version du NDA publiée',ndaRemove:'NDA retiré',grantDocument:'Droit documentaire enregistré',documentTransition:'Document mis à jour',financeDraft:'Indicateur enregistré',financeTransition:'Indicateur mis à jour',crmUpdate:'Fiche CRM mise à jour',crmNote:'Note ajoutée',qaReply:'Réponse envoyée',qaClose:'Question clôturée'}
 import type { AdminMetric } from './FinanceEditor'
 import type { AdminCommand } from './contracts'
+const Questions=lazy(()=>import('../qa/Questions').then(m=>({default:m.Questions})))
+const TechnicalPanel=lazy(()=>import('../technical/TechnicalPanel').then(m=>({default:m.TechnicalPanel})))
+const AnalyticsPanel=lazy(()=>import('../analytics/AnalyticsPanel').then(m=>({default:m.AnalyticsPanel})))
+const CrmBoard=lazy(()=>import('../crm/CrmBoard').then(m=>({default:m.CrmBoard})))
+const FinanceEditor=lazy(()=>import('./FinanceEditor').then(m=>({default:m.FinanceEditor})))
+const PageEditor=lazy(()=>import('../blocks/PageEditor').then(m=>({default:m.PageEditor})))
+const AccessManager=lazy(()=>import('./AccessManager').then(m=>({default:m.AccessManager})))
+const DocumentsPanel=lazy(()=>import('./DocumentsPanel').then(m=>({default:m.DocumentsPanel})))
+const TeamPanel=lazy(()=>import('./TeamPanel').then(m=>({default:m.TeamPanel})))
+const RoomSettings=lazy(()=>import('./RoomSettings').then(m=>({default:m.RoomSettings})))
+const EmailLog=lazy(()=>import('./EmailLog').then(m=>({default:m.EmailLog})))
+const NdaPanel=lazy(()=>import('./NdaPanel').then(m=>({default:m.NdaPanel})))
 type Grant={id:string;capability:string;resourceId:string|null;effect:string;startsAt?:number|null;expiresAt:number|null;revokedAt:number|null}
 type Applicant={id:string;name:string;email:string;organization:string;grants:Grant[]}
 type Section={id:string;slug:string;category:string;order:number;published:boolean;latest:{id:string;number:number;state:string;titleFr:string;titleEn:string;bodyFr:string;bodyEn:string;source:string;own:boolean}|null}
@@ -35,6 +48,8 @@ type DocumentItem={id:string;titleFr:string;titleEn:string;category:string;statu
 type State={identity:{name:string;rooms:{id:string;name:string;status?:string}[]};dashboard:{room:{id:string;name:string;description?:string;status:string};capabilities:string[];applicants:Applicant[];sections:Section[];documents:DocumentItem[];metrics:AdminMetric[];uploadEnabled:boolean;manualScan?:boolean;nda?:NdaState|null;emails?:{id:string;kind:string;to:string;subject:string;status:string;attempts:number;lastError:string|null;createdAt:number;sentAt:number|null}[]|null;team?:{members:{id:string;name:string;email:string;capabilities:string[];revoked:boolean;self:boolean}[];invites:{id:string;email:string;capabilities:string[];createdAt:number;expiresAt:number;status:string}[]}|null;images?:Record<string,{src:string;width:number;height:number}>;contacts:Contact[];questions:Question[];analytics:AnalyticsResult|null;technicalTargets:{key:string;label:string}[];access:{groups:{id:string;name:string;profileIds:string[]}[];links:{id:string;label:string;targets:{capability:string;resourceId?:string}[];email:string|null;startsAt:number;expiresAt:number;grantUntil:number|null;maxUses:number;uses:number;active:boolean;revoked:boolean}[]}|null}}
 export function AdminRoom({initial,reload,touch,command,history,questionRead,technical,createLink,reviewUrl,uploadImage,verifySession,subscribeSession,subscribeEmails}:{initial:State;verifySession?:()=>Promise<{kind:'verified';capabilities:string[]}|{kind:'denied'|'temporary'}>;subscribeEmails?:(onResult:(rows:NonNullable<State['dashboard']['emails']>)=>void)=>()=>void;subscribeSession?:(onResult:(r:{kind:'verified';capabilities:string[]}|{kind:'denied'|'temporary'})=>void)=>()=>void;touch:()=>Promise<{ok:boolean}>;reload:()=>Promise<State|null>;command:(data:AdminCommand)=>Promise<{ok:boolean;invite?:Invite;reason?:string;retryAfterSeconds?:number;roomCreatedId?:string;roomUpdated?:{id:string;name:string;description:string;status:string}}>;history:(id:string)=>Promise<HistoryEvent[]|null>;questionRead:(id:string)=>Promise<Thread|null>;technical:(key:string,draft:boolean)=>Promise<TechnicalResult|null>;createLink:Parameters<typeof AccessManager>[0]['createLink'];reviewUrl:(documentId:string)=>Promise<string|null>;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
  const [data,setData]=useState<State|null>(initial),[busy,setBusy]=useState(false),[view,setView]=useState('dashboard'),[menu,setMenu]=useState(false),[palette,setPalette]=useState(false)
+ const [hydrated,setHydrated]=useState(false)
+ useEffect(()=>{setHydrated(true)},[])
  const seq=useRef(0),lastTouch=useRef(Date.now()),touching=useRef(false),lastVerified=useRef(Date.now()),operation=useRef(false),cooldown=useRef(0)
  const canWatchEmails=!!data?.dashboard.capabilities.includes('access:manage')
  useEffect(()=>{if(!subscribeEmails||view!=='emails'||!canWatchEmails)return;return subscribeEmails(rows=>setData(prev=>prev?{...prev,dashboard:{...prev.dashboard,emails:rows}}:null))},[subscribeEmails,view,canWatchEmails])
@@ -144,7 +159,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
   ...docsPending.map(x=>({icon:FileText,text:'Document en attente : '+x.titleFr,hint:({clean:'Vérifié, prêt à publier',pending:'Vérification en attente',rejected:'Rejeté'} as Record<string,string>)[x.version?.scanStatus??'pending']??'Vérification en attente',view:'documents',tone:'blue'})),
  ]
  return <div className={'adm'+(menu?' menu-open':'')}>
-  <aside className="adm-side">
+  <aside className="adm-side" id="adc-admin-navigation">
    <div className="adm-brand"><img src="/adc-logo-mark.png" alt="African Digit Consulting"/><span>Administration</span></div>
    <div className="adm-room"><span className={'adm-dot '+(d.room.status==='published'?'live':'')}/>{identity.rooms.length>1?<select aria-label="Salle" value={roomId} onChange={e=>location.assign('/admin?roomId='+encodeURIComponent(e.target.value))}>{identity.rooms.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select>:<strong>{d.room.name}</strong>}<small>{d.room.status==='published'?'En ligne':d.room.status==='archived'?'Archivée':'Non publiée'}</small><button className="adm-room-settings" onClick={()=>go('settings')}>Gérer les salles <ChevronRight size={14}/></button></div>
    <nav aria-label="Administration">{groups.map(g=><div key={g} className="adm-group"><p>{g}</p>{views.filter(v=>v.group===g).map(v=><button key={v.key} className={'adm-nav'+(current.key===v.key?' is-active':'')} aria-current={current.key===v.key?'page':undefined} onClick={()=>go(v.key)}><v.icon size={18}/><span>{v.label}</span>{!!v.badge&&<em>{v.badge}</em>}</button>)}</div>)}</nav>
@@ -153,7 +168,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
   <button className="adm-scrim" aria-label="Fermer le menu" tabIndex={menu?0:-1} onClick={()=>setMenu(false)}/>
   <main className="adm-main">
     {(connectionWarning||sessionWarning)&&<div className="session-warning" role="status"><span>{sessionWarning?'Vérification de sécurité temporairement indisponible.':'Actualisation des données temporairement indisponible. Les données affichées peuvent dater de la dernière vérification.'}</span><button type="button" disabled={retrying||busy} onClick={()=>void retry()}>{retrying?'Vérification…':'Réessayer'}</button></div>}
-   <header className="adm-top"><button className="dr-icon adm-burger" aria-label="Ouvrir le menu" onClick={()=>setMenu(true)}><Menu size={19}/></button>
+   <header className="adm-top"><button className="dr-icon adm-burger" aria-label="Ouvrir le menu" aria-expanded={menu} aria-controls="adc-admin-navigation" disabled={!hydrated} onClick={()=>setMenu(true)}><Menu size={19}/></button>
     <div className="adm-title"><h1>{current.label}</h1><p>{current.desc}</p></div>
     <div className="adm-actions">
      <Dialog open={palette} onOpenChange={setPalette}><DialogTrigger shortcut="mod+k" className="adm-search"><Search size={16}/><span>Rechercher…</span><DialogShortcut className="adm-kbd"/></DialogTrigger><DialogBackdrop className="adm-backdrop"/><DialogContent className="adm-palette"><DialogTitle className="sr-only">Aller à…</DialogTitle>
@@ -165,6 +180,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
      <a className="dr-btn ghost adm-preview" href={'/investor?roomId='+encodeURIComponent(roomId)} target="_blank" rel="noopener"><Eye size={16}/><span>Voir comme investisseur</span></a>
     </div></header>
    <div className={'adm-body view-'+current.key} key={current.key}>
+    <DeferredPanel key={current.key}>
     {current.key==='dashboard'&&<div className="adm-dash">
      <section className={'adm-hero '+(d.room.status==='published'?'live':'')}><div className="dr-hero-glow" aria-hidden="true"/><div><p className="journey-kicker">{d.room.name}</p><h2>Bonjour {identity.name.split(' ')[0]}.</h2><p>{d.room.status==='published'?'La salle est en ligne. Les investisseurs autorisés voient les pages publiées.':'La salle n’est pas encore publiée : préparez les pages et les accès, puis mettez-la en ligne.'}</p></div>
       <div className="adm-hero-cta">{has('content:review')&&d.room.status!=='archived'&&<button className={'dr-btn'+(d.room.status==='published'?' ghost light':'')} disabled={busy} onClick={async()=>{if(await confirm({title:d.room.status==='published'?'Dépublier la salle ?':'Publier la salle ?',description:d.room.status==='published'?'Plus aucun investisseur ne pourra la consulter jusqu’à nouvelle publication.':'Les investisseurs disposant d’un accès verront immédiatement les pages publiées.',cancelLabel:'Annuler',confirmLabel:d.room.status==='published'?'Dépublier':'Publier'}))void run({kind:'roomStatus',roomId,status:d.room.status==='published'?'draft':'published'})}}><Globe2 size={16}/>{d.room.status==='published'?'Dépublier':'Publier la salle'}</button>}<a className="dr-btn ghost light" href={'/investor?roomId='+encodeURIComponent(roomId)} target="_blank" rel="noopener"><Eye size={16}/>Aperçu</a></div></section>
@@ -202,6 +218,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
     {current.key==='analytics'&&<div className="adm-legacy"><AnalyticsPanel data={d.analytics}/></div>}
     {current.key==='technical'&&<div className="adm-legacy"><TechnicalPanel targets={d.technicalTargets} canDraft={has('content:edit')} request={technical}/></div>}
     {current.key==='documents'&&<DocumentsPanel roomId={roomId} documents={d.documents} canEdit={has('content:edit')} canReview={has('content:review')} uploadEnabled={d.uploadEnabled} manualScan={!!d.manualScan} reviewUrl={reviewUrl} busy={busy} run={run} goAccess={()=>go('access')} onUploaded={async()=>{const token=++seq.current;const next=await reload();if(token===seq.current)setData(next);if(!next)throw Error('Refresh failed')}}/>}
+    </DeferredPanel>
    </div>
   </main>
   <ToastRegion className="adm-toasts">{()=><Toast className="adm-toast"><div><ToastTitle className="adm-toast-title"/><ToastDescription className="adm-toast-desc"/></div></Toast>}</ToastRegion>
