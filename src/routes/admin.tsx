@@ -30,26 +30,18 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
  let stage='token'
  try{
   if(!await bridge.getToken())return {problem:'signin' as const}
-  stage='mfa-status'
-  let mfa=await bridge.fetchAuthQuery(api.mfa.status,{})
-  // Existing administrators should never be locked out by a failed invitation claim.
-  // For new members, claiming is still mandatory and remains verified-email gated.
-  if(!mfa||!data.roomId){
-   stage='invitation-claim'
-   try{await bridge.fetchAuthMutation(api.team.claim,{});if(!mfa){stage='mfa-status';mfa=await bridge.fetchAuthQuery(api.mfa.status,{})}}
-   catch(error){if(!mfa)throw error;const failure=safeAuthFailure(error);console.warn('[adc:admin] invitation claim deferred',failure);if(failure.kind==='rate-limit')throw error}
+  stage='bootstrap'
+  const roomId=data.roomId as Id<'rooms'>|undefined
+  let result=await bridge.fetchAuthQuery(api.adminPanels.bootstrap,{roomId})
+  if(result.kind==='claim'){
+   stage='invitation-claim';await bridge.fetchAuthMutation(api.team.claim,{})
+   stage='bootstrap';result=await bridge.fetchAuthQuery(api.adminPanels.bootstrap,{roomId,skipClaim:true})
   }
-  if(!mfa)return {problem:'membership' as const}
-  if(!mfa.verified)return {mfa} as const
-  stage='room-membership'
-  const identity=await bridge.fetchAuthQuery(api.admin.rooms,{})
-  if(!identity)return {problem:'membership' as const}
-  const room=data.roomId?identity.rooms.find(r=>r.id===data.roomId):identity.rooms[0]
-  if(!room)return {problem:'membership' as const}
-  stage='dashboard'
-  const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
-  stage='optional-panels'
-  const {metrics,contacts,questions,analytics,access,team,emails,nda}=await bridge.fetchAuthQuery(api.adminPanels.overview,{roomId:room.id});const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
+  if(result.kind==='mfa')return {mfa:result.mfa} as const
+  if(result.kind!=='ready')return {problem:'membership' as const}
+  const {identity,dashboard,panels:{metrics,contacts,questions,analytics,access,team,emails,nda}}=result
+  const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,dashboard.room.id).map(t=>({key:t.key,label:t.label})):[]
+  return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
  }catch(error){
   const failure=safeAuthFailure(error)
   console.warn('[adc:admin] load failed',{stage,...failure})
@@ -182,9 +174,9 @@ function SocketAdmin(props:ComponentProps<typeof AdminRoom>){
  }
  const reload:ComponentProps<typeof AdminRoom>['reload']=async()=>{
   if(!ready)throw Error('Connection unavailable')
-  const identity=await client.query(api.admin.rooms,{})
-  if(!identity||!identity.rooms.some(r=>r.id===roomId))return null
-  const [dashboard,panels]=await Promise.all([client.query(api.admin.dashboard,{roomId}),client.query(api.adminPanels.overview,{roomId})])
+  const result=await client.query(api.adminPanels.bootstrap,{roomId,skipClaim:true,nonce:Date.now()})
+  if(result.kind!=='ready')return null
+  const {identity,dashboard,panels}=result
   return {identity,dashboard:{...props.initial.dashboard,...dashboard,...panels,metrics:panels.metrics??[],contacts:panels.contacts??[],questions:panels.questions??[]}}
  }
  return <AdminRoom {...props} verifySession={verifySession} subscribeSession={subscribeSession} reload={reload}

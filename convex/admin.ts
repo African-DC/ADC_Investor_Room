@@ -43,7 +43,7 @@ export const assignApplicant=internalMutation({args:{roomId:v.id('rooms'),profil
  const existing=await ctx.db.query('roomApplicants').withIndex('by_room_profile',q=>q.eq('roomId',a.roomId).eq('profileId',a.profileId)).unique()
  if(!existing){await ctx.db.insert('roomApplicants',a);await ctx.db.insert('auditLogs',{actorId:'staging-cli',event:'staging.applicant.assigned',resourceId:a.roomId,at:Date.now()})}
 }})
-export const rooms=query({args:{},handler:async ctx=>{
+export async function readRooms(ctx:QueryCtx){
  if(!enabled())return null
  const user=await authComponent.safeGetAuthUser(ctx)
  if(!user?.emailVerified)return null
@@ -52,9 +52,10 @@ export const rooms=query({args:{},handler:async ctx=>{
  const rooms=[]
  for(const m of memberships){if(!hasAdminCapability(m,user._id,m.roomId))continue;const room=await ctx.db.get(m.roomId);if(room)rooms.push({id:room._id,name:room.name,status:room.status})}
  return rooms.length?{name:user.name,rooms}:null
-}})
-export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
- const {user,membership}=await admin(ctx,a.roomId)
+}
+export const rooms=query({args:{},handler:readRooms})
+export async function readDashboard(ctx:QueryCtx,a:{roomId:Id<'rooms'>},actor:Awaited<ReturnType<typeof admin>>){
+ const {user,membership}=actor
  const room=await ctx.db.get(a.roomId)
  if(!room)throw new Error('Unavailable')
  const capabilities=membership.capabilities
@@ -88,7 +89,8 @@ export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>
  }
  const images=await imagesFor(ctx,room._id,sections.flatMap(s=>s.latest?[...imageIdsIn(s.latest.blocksFr),...imageIdsIn(s.latest.blocksEn)]:[]))
  return {room:{id:room._id,name:room.name,description:room.description??'',status:room.status},capabilities,applicants,sections,documents,images}
-}})
+}
+export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>readDashboard(ctx,a,await admin(ctx,a.roomId))})
 export const grant=mutation({args:{roomId:v.id('rooms'),profileId:v.id('investorProfiles'),capability:v.union(v.literal('room:read'),v.literal('section:read')),sectionId:v.optional(v.id('sections')),effect:v.union(v.literal('allow'),v.literal('deny')),expiresAt:v.optional(v.number())},handler:async(ctx,a):Promise<Id<'accessGrants'>>=>{
  const {user}=await admin(ctx,a.roomId,'access:manage')
  const applicant=await ctx.db.query('roomApplicants').withIndex('by_room_profile',q=>q.eq('roomId',a.roomId).eq('profileId',a.profileId)).unique()

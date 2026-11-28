@@ -24,12 +24,13 @@ export async function requireMfa(ctx:QueryCtx|MutationCtx,userId:string){
  const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',userId)).unique()
  if(mfa?.status!=='active'||(mfa.activatedAt??0)>proof.verifiedAt)throw new Error('MFA required')
 }
-export const status=query({args:{},handler:async ctx=>{
+export async function readMfaStatus(ctx:QueryCtx){
  const a=await actor(ctx);if(!a)return null
  const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',a.user._id)).unique()
  const proof=await ctx.db.query('adminMfaProofs').withIndex('by_session',q=>q.eq('sessionId',a.sessionId)).first()
  return {name:a.user.name,email:a.user.email,enrolled:mfa?.status==='active',verified:!!proof&&proofValid(proof,a.user._id,Date.now())&&mfa?.status==='active'&&(mfa.activatedAt??0)<=proof.verifiedAt,lockedUntil:mfa?.lockedUntil&&mfa.lockedUntil>Date.now()?mfa.lockedUntil:null,recoveryLeft:mfa?.recoveryHashes.length??0}
-}})
+}
+export const status=query({args:{},handler:readMfaStatus})
 export const actorForAction=internalQuery({args:{},handler:async ctx=>{const a=await actor(ctx);if(!a)return null;const mfa=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',a.user._id)).unique();return {userId:a.user._id,email:a.user.email,active:mfa?.status==='active'}}})
 export const storePending=internalMutation({args:{userId:v.string(),secretSealed:v.string()},handler:async(ctx,a)=>{
  const prior=await ctx.db.query('adminMfa').withIndex('by_user',q=>q.eq('authUserId',a.userId)).unique()
