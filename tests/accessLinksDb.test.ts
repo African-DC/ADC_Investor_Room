@@ -45,3 +45,10 @@ it('access granted by a link ends at grantUntil',async()=>{
  expect(permits('u_alice',room,grants,Date.now(),'room:read')).toBe(true)
  expect(permits('u_alice',room,grants,until+1,'room:read')).toBe(false)
 })
+
+it('does not consume an invitation whose granted access is already expired',async()=>{
+ const {t,linkId}=await setup({grantUntil:Date.now()-1})
+ expect(await t.run(ctx=>redeemCore(ctx,alice,TOKEN))).toEqual({ok:false,reason:'grantExpired'})
+ expect((await t.run(ctx=>ctx.db.get(linkId)))?.uses).toBe(0)
+ expect(await t.run(ctx=>ctx.db.query('accessGrants').collect())).toHaveLength(0)
+})

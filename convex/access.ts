@@ -73,10 +73,11 @@ export const overview=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
 export const storeLink=internalMutation({args:{roomId:v.id('rooms'),tokenHash:v.string(),label:v.string(),targets:v.array(target),email:v.optional(v.string()),startsAt:v.number(),expiresAt:v.number(),grantUntil:v.optional(v.number()),maxUses:v.number()},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'access:manage'),now=Date.now()
  if(a.expiresAt<=now||a.expiresAt<=a.startsAt||a.expiresAt-a.startsAt>MAX_LINK_DAYS*86400000)throw new Error('Invalid dates')
- if(a.grantUntil!==undefined&&a.grantUntil<=a.startsAt)throw new Error('Invalid dates')
+ if(a.grantUntil!==undefined&&a.grantUntil<=Math.max(now,a.startsAt))throw new Error('Invalid dates')
  if(!Number.isSafeInteger(a.maxUses)||a.maxUses<1||a.maxUses>MAX_LINK_USES)throw new Error('Invalid uses')
  if(a.email!==undefined&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email))throw new Error('Invalid email')
  await checkTargets(ctx,a.roomId,a.targets)
+ if(!a.targets.some(t=>t.capability==='room:read'))throw new Error('Room entry required')
  const id=await ctx.db.insert('accessLinks',{...a,label:clean(a.label,120),email:a.email?.toLowerCase(),uses:0,createdBy:user._id,createdAt:now})
  await ctx.db.insert('auditLogs',{actorId:user._id,event:'access.link_created',resourceId:id,at:now});return id
 }})
@@ -108,8 +109,9 @@ export async function redeemCore(ctx:MutationCtx,user:{_id:string;email:string;n
  if(!link||link.revokedAt)return {ok:false,reason:'invalid'}
  if(now<link.startsAt)return {ok:false,reason:'notyet'}
  if(now>=link.expiresAt)return {ok:false,reason:'expired'}
- if(link.email&&link.email!==user.email.toLowerCase())return {ok:false,reason:'email'}
+ if(link.email&&link.email!==user.email.trim().toLowerCase())return {ok:false,reason:'email'}
  const used=await ctx.db.query('accessLinkUses').withIndex('by_link_user',q=>q.eq('linkId',link._id).eq('authUserId',user._id)).first()
+ if(link.grantUntil!==undefined&&link.grantUntil<=now)return {ok:false,reason:'grantExpired'}
  if(used)return {ok:true,roomId:link.roomId}
  if(link.uses>=link.maxUses)return {ok:false,reason:'full'}
  let profile=await ctx.db.query('investorProfiles').withIndex('by_auth_user',q=>q.eq('authUserId',user._id)).unique()
