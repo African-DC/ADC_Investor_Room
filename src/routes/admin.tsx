@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader,setResponseHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { getAuthBridge } from '../lib/auth-server'
+import { authClient } from '../lib/auth-client'
 import { safeAuthFailure } from '../lib/auth-token'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -16,7 +17,6 @@ import { MfaGate } from '../features/admin/MfaGate'
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 // Admin UI is allowed wherever the flag is on: every privileged Convex call enforces session-bound TOTP MFA.
 // A missing capability for one panel must not break the whole back office.
-async function safe<T>(p:Promise<T>,panel='optional'):Promise<T|null>{try{return await p}catch(error){console.warn('[adc:panel] read failed',{panel,...safeAuthFailure(error)});return null}}
 const adminAllowed=()=>process.env.ADC_STAGING_ADMIN_UI==='true'
 const search=z.object({roomId:z.string().max(128).optional()})
 const load=createServerFn({method:'GET'}).validator(search).handler(async({data})=>{
@@ -44,16 +44,8 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   if(!room)return {problem:'membership' as const}
   stage='dashboard'
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
-  const has=(...caps:string[])=>caps.some(c=>(dashboard.capabilities as readonly string[]).includes(c))
-  const args={roomId:room.id}
-  const metrics=has('finance:edit','finance:review')?await safe(bridge.fetchAuthQuery(api.finance.adminList,args),'finance'):null
-  const contacts=has('crm:read','crm:edit')?await safe(bridge.fetchAuthQuery(api.crm.list,args),'crm'):null
-  const questions=has('qa:read','qa:reply')?await safe(bridge.fetchAuthQuery(api.qa.adminList,args),'qa'):null
-  const analytics=has('analytics:read')?await safe(bridge.fetchAuthQuery(api.analytics.dashboard,{...args,days:30}),'analytics'):null
-  const access=has('access:manage')?await safe(bridge.fetchAuthQuery(api.access.overview,args),'access'):null
-  const team=has('access:manage')?await safe(bridge.fetchAuthQuery(api.team.list,args),'team'):null
-  const emails=has('access:manage')?await safe(bridge.fetchAuthQuery(api.outbox.list,args),'emails'):null
-  const nda=has('access:manage')?await safe(bridge.fetchAuthQuery(api.nda.adminView,args),'nda'):null;const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
+  stage='optional-panels'
+  const {metrics,contacts,questions,analytics,access,team,emails,nda}=await bridge.fetchAuthQuery(api.adminPanels.overview,{roomId:room.id});const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
  }catch(error){
   const failure=safeAuthFailure(error)
   console.warn('[adc:admin] load failed',{stage,...failure})
@@ -100,7 +92,7 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
    case 'archive':await bridge.fetchAuthMutation(api.admin.archive,{roomId,sectionId:data.sectionId as Id<'sections'>});break
   }
   return {ok:true}
- }catch(error){console.warn('[adc:admin] command failed',{command:data.kind,...safeAuthFailure(error)});return {ok:false}}
+ }catch(error){const failure=safeAuthFailure(error);console.warn('[adc:admin] command failed',{command:data.kind,...failure});return {ok:false,reason:failure.kind}}
 })
 const history=createServerFn({method:'GET'}).validator(z.object({roomId:z.string().max(128),profileId:z.string().max(128)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
@@ -188,10 +180,11 @@ const touch=createServerFn({method:'POST'}).handler(async()=>{
 })
 function AdminProblem({problem}:{problem:'signin'|'membership'|'unavailable'|'throttled'}){
  const [lang,setLang]=useState<'fr'|'en'>('fr'),fr=lang==='fr'
- const [remaining,setRemaining]=useState(problem==='throttled'?60:0)
+ const [remaining,setRemaining]=useState(problem==='throttled'?60:0),[switching,setSwitching]=useState(false),[switchError,setSwitchError]=useState(false)
+ async function changeAccount(){setSwitching(true);setSwitchError(false);try{const r=await authClient.signOut();if(r.error)throw Error('sign out');location.replace('/connexion?next=%2Fadmin')}catch{setSwitchError(true);setSwitching(false)}}
  useEffect(()=>{if(problem!=='throttled')return;const until=Date.now()+60000;const timer=window.setInterval(()=>setRemaining(Math.max(0,Math.ceil((until-Date.now())/1000))),1000);return()=>window.clearInterval(timer)},[problem])
  const title=problem==='throttled'?(fr?'Vérification temporairement limitée.':'Verification temporarily limited.'):problem==='membership'?(fr?'Accès administrateur non attribué.':'Admin access not assigned.'):problem==='signin'?(fr?'Connexion requise.':'Sign-in required.'):(fr?'Connexion momentanément indisponible.':'Connection temporarily unavailable.')
- return <JourneyFrame space="admin" lang={lang} setLang={setLang} tone="alert"><h1>{title}</h1><p role="alert" className="frame-lead">{problem==='throttled'?(fr?'Le serveur limite temporairement les requêtes. Inutile de redemander un lien de connexion.':'The server is temporarily limiting requests. No need to request another sign-in link.'):problem==='membership'?(fr?'Vérifiez que votre invitation est active et correspond à votre adresse e-mail vérifiée. Contactez ADC si nécessaire.':'Check that your invitation is active and matches your verified email. Contact ADC if needed.'):problem==='signin'?(fr?'Connectez-vous par lien ou code e-mail, puis validez votre Authenticator.':'Sign in by email link or code, then verify your authenticator.'):(fr?'Impossible de vérifier votre accès pour le moment. Réessayez ; si le problème persiste, reconnectez-vous par e-mail.':'Your access could not be verified. Retry; if the problem persists, sign in by email again.')}</p><button className="primary journey-primary" disabled={remaining>0} onClick={()=>location.reload()}>{remaining>0?(fr?'Réessayer dans ':'Retry in ')+remaining+' s':fr?'Réessayer':'Retry'}</button>{problem!=='throttled'&&<a className="secondary journey-link" href="/connexion?next=/admin">{fr?'Se connecter avec une adresse e-mail':'Sign in with an email address'}</a>}</JourneyFrame>
+ return <JourneyFrame space="admin" lang={lang} setLang={setLang} tone="alert"><h1>{title}</h1><p role="alert" className="frame-lead">{problem==='throttled'?(fr?'Le serveur limite temporairement les requêtes. Inutile de redemander un lien de connexion.':'The server is temporarily limiting requests. No need to request another sign-in link.'):problem==='membership'?(fr?'Vérifiez que votre invitation est active et correspond à votre adresse e-mail vérifiée. Contactez ADC si nécessaire.':'Check that your invitation is active and matches your verified email. Contact ADC if needed.'):problem==='signin'?(fr?'Connectez-vous par lien ou code e-mail, puis validez votre Authenticator.':'Sign in by email link or code, then verify your authenticator.'):(fr?'Impossible de vérifier votre accès pour le moment. Réessayez ; si le problème persiste, reconnectez-vous par e-mail.':'Your access could not be verified. Retry; if the problem persists, sign in by email again.')}</p><button className="primary journey-primary" disabled={remaining>0} onClick={()=>location.reload()}>{remaining>0?(fr?'Réessayer dans ':'Retry in ')+remaining+' s':fr?'Réessayer':'Retry'}</button>{problem==='signin'?<a className="secondary journey-link" href="/connexion?next=/admin">{fr?'Se connecter avec une adresse e-mail':'Sign in with an email address'}</a>:problem!=='throttled'&&<button className="secondary journey-link" disabled={switching} onClick={()=>void changeAccount()}>{fr?'Changer de compte':'Switch account'}</button>}{switchError&&<p role="alert">{fr?'Déconnexion impossible. Réessayez.':'Unable to sign out. Retry.'}</p>}</JourneyFrame>
 }
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/connexion',search:{next:'/admin'}});return {state}

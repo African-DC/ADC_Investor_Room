@@ -32,7 +32,7 @@ type Applicant={id:string;name:string;email:string;organization:string;grants:Gr
 type Section={id:string;slug:string;category:string;order:number;published:boolean;latest:{id:string;number:number;state:string;titleFr:string;titleEn:string;bodyFr:string;bodyEn:string;source:string;own:boolean}|null}
 type DocumentItem={id:string;titleFr:string;titleEn:string;category:string;status:string;version:{id:string;number:number;scanStatus:string;scanMethod?:string|null;sha256?:string;sizeBytes:number;own:boolean}|null}
 type State={identity:{name:string;rooms:{id:string;name:string}[]};dashboard:{room:{id:string;name:string;status:string};capabilities:string[];applicants:Applicant[];sections:Section[];documents:DocumentItem[];metrics:AdminMetric[];uploadEnabled:boolean;manualScan?:boolean;nda?:NdaState|null;emails?:{id:string;kind:string;to:string;subject:string;status:string;attempts:number;lastError:string|null;createdAt:number;sentAt:number|null}[]|null;team?:{members:{id:string;name:string;email:string;capabilities:string[];revoked:boolean;self:boolean}[];invites:{id:string;email:string;capabilities:string[];createdAt:number;expiresAt:number;status:string}[]}|null;images?:Record<string,{src:string;width:number;height:number}>;contacts:Contact[];questions:Question[];analytics:AnalyticsResult|null;technicalTargets:{key:string;label:string}[];access:{groups:{id:string;name:string;profileIds:string[]}[];links:{id:string;label:string;targets:{capability:string;resourceId?:string}[];email:string|null;startsAt:number;expiresAt:number;grantUntil:number|null;maxUses:number;uses:number;active:boolean;revoked:boolean}[]}|null}}
-export function AdminRoom({initial,reload,touch,command,history,questionRead,technical,createLink,reviewUrl,uploadImage,verifySession}:{initial:State;verifySession?:()=>Promise<{kind:'verified';capabilities:string[]}|{kind:'denied'|'temporary'}>;touch:()=>Promise<{ok:boolean}>;reload:()=>Promise<State|null>;command:(data:AdminCommand)=>Promise<{ok:boolean;invite?:Invite}>;history:(id:string)=>Promise<HistoryEvent[]|null>;questionRead:(id:string)=>Promise<Thread|null>;technical:(key:string,draft:boolean)=>Promise<TechnicalResult|null>;createLink:Parameters<typeof AccessManager>[0]['createLink'];reviewUrl:(documentId:string)=>Promise<string|null>;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
+export function AdminRoom({initial,reload,touch,command,history,questionRead,technical,createLink,reviewUrl,uploadImage,verifySession}:{initial:State;verifySession?:()=>Promise<{kind:'verified';capabilities:string[]}|{kind:'denied'|'temporary'}>;touch:()=>Promise<{ok:boolean}>;reload:()=>Promise<State|null>;command:(data:AdminCommand)=>Promise<{ok:boolean;invite?:Invite;reason?:string}>;history:(id:string)=>Promise<HistoryEvent[]|null>;questionRead:(id:string)=>Promise<Thread|null>;technical:(key:string,draft:boolean)=>Promise<TechnicalResult|null>;createLink:Parameters<typeof AccessManager>[0]['createLink'];reviewUrl:(documentId:string)=>Promise<string|null>;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
  const [data,setData]=useState<State|null>(initial),[busy,setBusy]=useState(false),[view,setView]=useState('dashboard'),[menu,setMenu]=useState(false),[palette,setPalette]=useState(false)
  const seq=useRef(0),lastTouch=useRef(Date.now()),touching=useRef(false),lastVerified=useRef(Date.now()),operation=useRef(false),cooldown=useRef(0)
  const [connectionWarning,setConnectionWarning]=useState(false),[retrying,setRetrying]=useState(false),[sessionWarning,setSessionWarning]=useState(false)
@@ -44,10 +44,16 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
   operation.current=true;setBusy(true);seq.current++
   try{
    const result=await command(data)
-   if(!result.ok)throw Error('Denied')
+   if(!result.ok){
+    if(result.reason==='rate-limit'){cooldown.current=Date.now()+60000;setConnectionWarning(true);toast.error('Serveur temporairement limité',{description:'Votre saisie est conservée. Réessayez dans une minute.'});return}
+    if(result.reason==='mfa-required'||result.reason==='unauthenticated'){setData(null);return}
+    if(result.reason==='missing-function'){toast.error('Mise à jour du serveur nécessaire',{description:'L’action n’a pas été confirmée. Contactez ADC.'});return}
+    throw Error('Denied')
+   }
    if(result.invite){
     const receipt=result.invite
     setData(prev=>prev?{...prev,dashboard:{...prev.dashboard,team:prev.dashboard.team?{...prev.dashboard.team,invites:[receipt,...prev.dashboard.team.invites.filter(i=>i.id!==receipt.id).map(i=>i.email===receipt.email&&i.status==='pending'?{...i,status:'revoked'}:i)].slice(0,100)}:null}}:null)
+    lastVerified.current=Date.now();setSessionWarning(false)
     onSuccess?.()
     toast.success('Invitation créée',{description:'Enregistrée. L’envoi de l’e-mail est suivi séparément.'})
     return

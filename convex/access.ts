@@ -1,3 +1,4 @@
+import type {QueryCtx} from './_generated/server'
 // Fine-grained, time-boxed access management (admin) and time-limited invitation links (investor redemption).
 import { action,mutation,query,internalMutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
@@ -63,20 +64,22 @@ export const setRoomStatus=mutation({args:{roomId:v.id('rooms'),status:v.union(v
  const {user}=await admin(ctx,a.roomId,'content:review');const room=await ctx.db.get(a.roomId);if(!room)throw new Error('Unavailable')
  await ctx.db.patch(room._id,{status:a.status});await ctx.db.insert('auditLogs',{actorId:user._id,event:'room.'+a.status,resourceId:room._id,at:Date.now()});return {ok:true}
 }})
-export const overview=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
- await admin(ctx,a.roomId,'access:manage');const now=Date.now()
+export async function readAccess(ctx:QueryCtx,a:{roomId:Id<'rooms'>}){
+ const now=Date.now()
  const groups=await ctx.db.query('investorGroups').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(200)
  const links=await ctx.db.query('accessLinks').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(200)
  return {groups:groups.map(g=>({id:g._id,name:g.name,profileIds:g.profileIds})),links:links.map(l=>({id:l._id,label:l.label,targets:l.targets,email:l.email??null,startsAt:l.startsAt,expiresAt:l.expiresAt,grantUntil:l.grantUntil??null,maxUses:l.maxUses,uses:l.uses,active:!l.revokedAt&&l.startsAt<=now&&l.expiresAt>now&&l.uses<l.maxUses,revoked:!!l.revokedAt}))}
-}})
+}
+export const overview=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{await admin(ctx,a.roomId,'access:manage');return readAccess(ctx,a)}})
 // ---- Time-limited links ----
 export const storeLink=internalMutation({args:{roomId:v.id('rooms'),tokenHash:v.string(),label:v.string(),targets:v.array(target),email:v.optional(v.string()),startsAt:v.number(),expiresAt:v.number(),grantUntil:v.optional(v.number()),maxUses:v.number()},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'access:manage'),now=Date.now()
  if(a.expiresAt<=now||a.expiresAt<=a.startsAt||a.expiresAt-a.startsAt>MAX_LINK_DAYS*86400000)throw new Error('Invalid dates')
- if(a.grantUntil!==undefined&&a.grantUntil<=a.startsAt)throw new Error('Invalid dates')
+ if(a.grantUntil!==undefined&&a.grantUntil<=Math.max(now,a.startsAt))throw new Error('Invalid dates')
  if(!Number.isSafeInteger(a.maxUses)||a.maxUses<1||a.maxUses>MAX_LINK_USES)throw new Error('Invalid uses')
  if(a.email!==undefined&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email))throw new Error('Invalid email')
  await checkTargets(ctx,a.roomId,a.targets)
+ if(!a.targets.some(t=>t.capability==='room:read'))throw new Error('Room entry required')
  const id=await ctx.db.insert('accessLinks',{...a,label:clean(a.label,120),email:a.email?.toLowerCase(),uses:0,createdBy:user._id,createdAt:now})
  await ctx.db.insert('auditLogs',{actorId:user._id,event:'access.link_created',resourceId:id,at:now});return id
 }})
@@ -108,8 +111,9 @@ export async function redeemCore(ctx:MutationCtx,user:{_id:string;email:string;n
  if(!link||link.revokedAt)return {ok:false,reason:'invalid'}
  if(now<link.startsAt)return {ok:false,reason:'notyet'}
  if(now>=link.expiresAt)return {ok:false,reason:'expired'}
- if(link.email&&link.email!==user.email.toLowerCase())return {ok:false,reason:'email'}
+ if(link.email&&link.email!==user.email.trim().toLowerCase())return {ok:false,reason:'email'}
  const used=await ctx.db.query('accessLinkUses').withIndex('by_link_user',q=>q.eq('linkId',link._id).eq('authUserId',user._id)).first()
+ if(link.grantUntil!==undefined&&link.grantUntil<=now)return {ok:false,reason:'grantExpired'}
  if(used)return {ok:true,roomId:link.roomId}
  if(link.uses>=link.maxUses)return {ok:false,reason:'full'}
  let profile=await ctx.db.query('investorProfiles').withIndex('by_auth_user',q=>q.eq('authUserId',user._id)).unique()

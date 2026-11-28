@@ -34,8 +34,8 @@ async function add(ctx:MutationCtx,a:{roomId:Id<'rooms'>;profileId:Id<'investorP
 }
 export const update=mutation({args:fields,handler:async(ctx,a)=>{const {user}=await admin(ctx,a.roomId,'crm:edit');return change(ctx,a,user._id)}})
 export const note=mutation({args:{roomId:v.id('rooms'),profileId:v.id('investorProfiles'),text:v.string()},handler:async(ctx,a)=>{const {user}=await admin(ctx,a.roomId,'crm:edit');return add(ctx,a,user._id)}})
-export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
- const {user,membership}=await admin(ctx,a.roomId)
+export async function readContacts(ctx:QueryCtx,a:{roomId:Id<'rooms'>},actor:Awaited<ReturnType<typeof admin>>){
+ const {user,membership}=actor
  if(!membership.capabilities.some(c=>c==='crm:read'||c==='crm:edit'))return []
  const links=await ctx.db.query('roomApplicants').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(101)
  if(links.length>100)throw Error('Pagination required')
@@ -46,7 +46,8 @@ export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
   result.push({id:p._id,name:p.name,email:p.email,organization:p.organization??'',stage:c?.stage??'new' as const,nextAction:c?.nextAction??'',dueDate:c?.dueDate??null,owner:c?.ownerId?(c.ownerId===user._id?'self':'other'):'none',revision:c?.revision??0})
  }
  return result
-}})
+}
+export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{const actor=await admin(ctx,a.roomId);return readContacts(ctx,a,actor)}})
 export const history=query({args:{roomId:v.id('rooms'),profileId:v.id('investorProfiles')},handler:async(ctx,a)=>{
  const {user,membership}=await admin(ctx,a.roomId)
  if(!membership.capabilities.some(c=>c==='crm:read'||c==='crm:edit'))throw Error('Unavailable')

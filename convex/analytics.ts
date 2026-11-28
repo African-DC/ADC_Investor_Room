@@ -47,8 +47,8 @@ export const sectionOpen=mutation({args:{roomId:v.id('rooms'),sectionId:v.id('se
  const user=await identity(ctx);if(!enabled()||!user)return {ok:false}
  return openSection(ctx,a.roomId,a.sectionId,user._id)
 }})
-export const dashboard=query({args:{roomId:v.id('rooms'),days:v.union(v.literal(7),v.literal(30),v.literal(90))},handler:async(ctx,a)=>{
- const {membership}=await admin(ctx,a.roomId)
+export async function readAnalytics(ctx:QueryCtx,a:{roomId:Id<'rooms'>,days:7|30|90},actor:Awaited<ReturnType<typeof admin>>){
+ const {membership}=actor
  if(!enabled()||!membership.capabilities.includes('analytics:read'))return null
  const start=utcDay(Date.now()-(a.days-1)*86400000)
  const raw=await ctx.db.query('engagement').withIndex('by_room_day',q=>q.eq('roomId',a.roomId).gte('day',start)).take(5001)
@@ -62,7 +62,8 @@ export const dashboard=query({args:{roomId:v.id('rooms'),days:v.union(v.literal(
   resources.push({kind:item.kind,count:item.count,label:s&&s.roomId===a.roomId?s.slug:d&&d.roomId===a.roomId?d.titleFr:'Ressource retirée'})
  }
  return {limited:false as const,participants:totals.participants,events:totals.events,sections:totals.sections,views:totals.views,downloads:totals.downloads,days:totals.days,resources}
-}})
+}
+export const dashboard=query({args:{roomId:v.id('rooms'),days:v.union(v.literal(7),v.literal(30),v.literal(90))},handler:async(ctx,a)=>{const actor=await admin(ctx,a.roomId);return readAnalytics(ctx,a,actor)}})
 export const purge=internalMutation({args:{},handler:async ctx=>{
  const expired=await ctx.db.query('engagement').withIndex('by_at',q=>q.lt('at',Date.now()-retentionDays*86400000)).take(200)
  for(const row of expired)await ctx.db.delete(row._id)

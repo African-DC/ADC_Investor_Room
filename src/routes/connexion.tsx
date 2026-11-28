@@ -16,7 +16,7 @@ const copy={
 function SignIn(){
  const {next}=Route.useSearch()
  const [lang,setLang]=useState<Lang>('fr'),t=copy[lang],fr=lang==='fr'
- const [email,setEmail]=useState(''),[otp,setOtp]=useState(''),[method,setMethod]=useState<'link'|'otp'>('link'),[state,setState]=useState<'idle'|'sending'|'sent'|'error'|'invalid'>('idle'),[verifying,setVerifying]=useState(false),[codeError,setCodeError]=useState(false),[sentAt,setSentAt]=useState(0),[resendWait,setResendWait]=useState(false)
+ const [email,setEmail]=useState(''),[otp,setOtp]=useState(''),[method,setMethod]=useState<'link'|'otp'>(next==='/invite'?'otp':'link'),[state,setState]=useState<'idle'|'sending'|'sent'|'error'|'invalid'>('idle'),[verifying,setVerifying]=useState(false),[codeError,setCodeError]=useState(false),[sentAt,setSentAt]=useState(0),[resendWait,setResendWait]=useState(false)
  const [ready,setReady]=useState(false)
  useEffect(()=>setReady(true),[])
  const space=next==='/admin'?'admin':'investor'

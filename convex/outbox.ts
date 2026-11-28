@@ -1,3 +1,4 @@
+import type {QueryCtx} from './_generated/server'
 // Idempotent e-mail outbox: one row per logical notification (unique key), delivered by a worker with retries.
 // Status is "sent" only after Resend accepted the message; failures keep their reason.
 import { internalAction,internalMutation,internalQuery,mutation,query } from './_generated/server'
@@ -5,9 +6,9 @@ import type { MutationCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { v } from 'convex/values'
-import { authComponent } from './auth'
+import { authComponent,createAuth } from './auth'
 import { admin } from './admin'
-import { transactionalEmail } from './lib/emailTemplate'
+import { transactionalEmail,adminInvitationEmail } from './lib/emailTemplate'
 const BACKOFF=[60_000,300_000,1_800_000,7_200_000,21_600_000],MAX_ATTEMPTS=BACKOFF.length+1
 type Kind='request_received'|'new_request'|'access_granted'|'document_published'|'qa_answer'|'admin_invite'
 const site=()=>process.env.SITE_URL??'https://dataroom.africandigitconsulting.com'
@@ -37,7 +38,7 @@ export async function adminRecipients(ctx:MutationCtx,roomId:Id<'rooms'>){
 }
 export const claim=internalMutation({args:{id:v.id('emailOutbox')},handler:async(ctx,a)=>{
  const row=await ctx.db.get(a.id);if(!row||row.status!=='pending'||row.nextAttemptAt>Date.now()+1000)return null
- await ctx.db.patch(row._id,{status:'sending',attempts:row.attempts+1});return {key:row.key,to:row.to,subject:row.subject,html:row.html,text:row.text,attempts:row.attempts+1}
+ await ctx.db.patch(row._id,{status:'sending',attempts:row.attempts+1});return {key:row.key,to:row.to,kind:row.kind,subject:row.subject,html:row.html,text:row.text,attempts:row.attempts+1}
 }})
 export const settle=internalMutation({args:{id:v.id('emailOutbox'),ok:v.boolean(),providerId:v.optional(v.string()),error:v.optional(v.string()),retryable:v.boolean()},handler:async(ctx,a)=>{
  const row=await ctx.db.get(a.id);if(!row)return
@@ -46,16 +47,35 @@ export const settle=internalMutation({args:{id:v.id('emailOutbox'),ok:v.boolean(
  await ctx.db.patch(row._id,{status:again?'pending':'failed',lastError:(a.error??'Erreur inconnue').slice(0,300),nextAttemptAt:Date.now()+delay})
  if(again)await ctx.scheduler.runAfter(delay,internal.outbox.deliver,{id:row._id})
 }})
+export const invitationForDelivery=internalQuery({args:{key:v.string(),to:v.string()},handler:async(ctx,a)=>{
+ if(!a.key.startsWith('admin_invite:'))return null
+ const id=ctx.db.normalizeId('adminInvites',a.key.slice('admin_invite:'.length))
+ const invite=id?await ctx.db.get(id):null
+ if(!invite||invite.email!==a.to||invite.revokedAt!==undefined||invite.acceptedAt!==undefined||invite.expiresAt<=Date.now())return null
+ return {expires:new Intl.DateTimeFormat('fr-FR',{dateStyle:'long',timeZone:'UTC'}).format(invite.expiresAt)}
+}})
 export const deliver=internalAction({args:{id:v.id('emailOutbox')},handler:async(ctx,a)=>{
  const job=await ctx.runMutation(internal.outbox.claim,{id:a.id});if(!job)return
  const key=process.env.RESEND_API_KEY,from=process.env.MAIL_FROM
  if(!key||!from){await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:false,error:'Service e-mail non configuré',retryable:true});return}
  try{
-  const res=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json','Idempotency-Key':job.key.slice(0,256)},body:JSON.stringify({from,to:[job.to],subject:job.subject,html:job.html,text:job.text})})
+  let content={subject:job.subject,html:job.html,text:job.text},deliveryKey=job.key
+  if(job.kind==='admin_invite'&&job.key.startsWith('admin_invite:')){
+   const invite=await ctx.runQuery(internal.outbox.invitationForDelivery,{key:job.key,to:job.to})
+   if(!invite){await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:false,error:'Invitation inactive',retryable:false});return}
+   let captured=''
+   const auth=createAuth(ctx,async(email,link)=>{if(email!==job.to)throw Error('Unexpected recipient');captured=link})
+   await auth.api.signInMagicLink({body:{email:job.to,callbackURL:'/admin',newUserCallbackURL:'/admin',errorCallbackURL:'/connexion?next=%2Fadmin'},headers:new Headers({origin:site()})})
+   if(!captured)throw Error('Missing verification link')
+   content=adminInvitationEmail(site(),captured,invite.expires)
+   // Fresh token per attempt: provider idempotency is per attempt, no token persisted in outbox.
+   deliveryKey=job.key+':'+job.attempts
+  }
+  const res=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json','Idempotency-Key':deliveryKey.slice(0,256)},body:JSON.stringify({from,to:[job.to],...content}),signal:AbortSignal.timeout(10000)})
   if(res.ok){const body=await res.json().catch(()=>({}))as {id?:string};await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:true,providerId:body.id,retryable:false});return}
   const detail=(await res.text().catch(()=>'')).slice(0,200)
   await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:false,error:'Resend '+res.status+(detail?' — '+detail:''),retryable:res.status===429||res.status>=500})
- }catch(e){await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:false,error:'Réseau : '+String((e as Error).message??e).slice(0,150),retryable:true})}
+ }catch(e){await ctx.runMutation(internal.outbox.settle,{id:a.id,ok:false,error:job.kind==='admin_invite'?'Service de connexion ou d’envoi indisponible':'Réseau : '+String((e as Error).message??e).slice(0,150),retryable:true})}
 }})
 /** Safety net: re-schedules due pending rows and recovers rows stuck in "sending" (worker crash). */
 export const sweep=internalMutation({args:{},handler:async ctx=>{
@@ -65,10 +85,11 @@ export const sweep=internalMutation({args:{},handler:async ctx=>{
  return n
 }})
 export const forRoom=internalQuery({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>ctx.db.query('emailOutbox').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)})
-export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
- await admin(ctx,a.roomId,'access:manage')
+export async function readEmails(ctx:QueryCtx,a:{roomId:Id<'rooms'>}){
+
  return (await ctx.db.query('emailOutbox').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)).map(r=>({id:r._id,kind:r.kind,to:r.to,subject:r.subject,status:r.status,attempts:r.attempts,lastError:r.lastError??null,createdAt:r.createdAt,sentAt:r.sentAt??null}))
-}})
+}
+export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{await admin(ctx,a.roomId,'access:manage');return readEmails(ctx,a)}})
 export const retry=mutation({args:{roomId:v.id('rooms'),id:v.id('emailOutbox')},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'access:manage');const r=await ctx.db.get(a.id);if(!r||r.roomId!==a.roomId||r.status!=='failed')throw new Error('Unavailable')
  await ctx.db.patch(r._id,{status:'pending',attempts:0,nextAttemptAt:Date.now(),lastError:undefined});await ctx.scheduler.runAfter(0,internal.outbox.deliver,{id:r._id})

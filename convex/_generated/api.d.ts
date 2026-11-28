@@ -10,6 +10,7 @@
 
 import type * as access from "../access.js";
 import type * as admin from "../admin.js";
+import type * as adminPanels from "../adminPanels.js";
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as crm from "../crm.js";
@@ -42,6 +43,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   access: typeof access;
   admin: typeof admin;
+  adminPanels: typeof adminPanels;
   analytics: typeof analytics;
   auth: typeof auth;
   crm: typeof crm;

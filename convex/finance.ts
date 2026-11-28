@@ -66,13 +66,14 @@ export const stagingTransition=internalMutation({args:{roomId:v.id('rooms'),metr
  if(!a.operatorId.trim())throw Error('Invalid operator')
  return await transitionMetric(ctx,a.roomId,a.metricId,a.action,a.operatorId)
 }})
-export const adminList=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
- const {user,membership}=await admin(ctx,a.roomId)
+export async function readFinance(ctx:QueryCtx,a:{roomId:Id<'rooms'>},actor:Awaited<ReturnType<typeof admin>>){
+ const {user,membership}=actor
  if(!membership.capabilities.some(c=>c==='finance:edit'||c==='finance:review'))return []
  const rows=await ctx.db.query('financialMetrics').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(101)
  if(rows.length>100)throw Error('Pagination required')
  return rows.map(m=>({id:m._id,sectionId:m.sectionId,kind:m.kind,scope:m.scope,periodStart:m.periodStart,periodEnd:m.periodEnd,definitionFr:m.definitionFr,definitionEn:m.definitionEn,value:m.value,unit:m.unit,evidenceVersionIds:m.evidenceVersionIds,status:m.status,own:m.authorId===user._id}))
-}})
+}
+export const adminList=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{const actor=await admin(ctx,a.roomId);return readFinance(ctx,a,actor)}})
 export async function publishedForIdentity(ctx:QueryCtx,userId:string,roomId:Id<'rooms'>){
  const room=await ctx.db.get(roomId);if(!room)return []
  const grants=await grantsFor(ctx,userId,roomId),nda=await acceptance(ctx,userId,roomId,room.ndaVersion),now=Date.now()

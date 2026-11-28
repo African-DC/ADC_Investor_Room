@@ -10,6 +10,7 @@ type Group={id:string;name:string;profileIds:string[]}
 type LinkRow={id:string;label:string;targets:{capability:string;resourceId?:string}[];email:string|null;startsAt:number;expiresAt:number;grantUntil:number|null;maxUses:number;uses:number;active:boolean;revoked:boolean}
 type Cap='room:read'|'section:read'|'document:read'|'document:download'
 type Target={capability:Cap;resourceId?:string}
+const roomAndSections=(sections:Item[]):Target[]=>[{capability:'room:read'},...sections.map(s=>({capability:'section:read' as const,resourceId:s.id}))]
 const key=(t:Target)=>t.capability+':'+(t.resourceId??'*')
 const day=(d:string,end=false)=>d?new Date(d+(end?'T23:59:59':'T00:00:00')).getTime():undefined
 const fmt=(n:number)=>new Intl.DateTimeFormat('fr',{dateStyle:'medium'}).format(n)
@@ -18,7 +19,7 @@ const stateLabel:Record<string,string>={active:'Actif',denied:'Refusé',schedule
 export function AccessManager({reload,roomId,roomStatus,canPublishRoom,applicants,sections,documents,groups,links,busy,run,createLink}:{reload:()=>Promise<void>;roomId:string;roomStatus:string;canPublishRoom:boolean;applicants:Applicant[];sections:Item[];documents:Item[];groups:Group[];links:LinkRow[];busy:boolean;run:(c:AdminCommand)=>Promise<void>;createLink:(d:{label:string;targets:Target[];email?:string;startsAt:number;expiresAt:number;grantUntil?:number;maxUses:number})=>Promise<{url:string;link?:LinkRow}|null>}){
  const [tab,setTab]=useState<'people'|'groups'|'links'>('people'),now=Date.now()
  const [selected,setSelected]=useState<string[]>([]),[targets,setTargets]=useState<Target[]>([{capability:'room:read'}]),[effect,setEffect]=useState<'allow'|'deny'>('allow'),[from,setFrom]=useState(''),[to,setTo]=useState(''),[q,setQ]=useState('')
- const label=(t:Target)=>t.capability==='room:read'?'Salle entière':t.capability==='section:read'?(sections.find(s=>s.id===t.resourceId)?.title??'Rubrique'):(documents.find(d=>d.id===t.resourceId)?.title??'Document')+(t.capability==='document:download'?' · téléchargement':'')
+ const label=(t:Target)=>t.capability==='room:read'?'Entrée dans la salle':t.capability==='section:read'?(sections.find(s=>s.id===t.resourceId)?.title??'Rubrique'):(documents.find(d=>d.id===t.resourceId)?.title??'Document')+(t.capability==='document:download'?' · téléchargement':'')
  const filtered=applicants.filter(a=>[a.name,a.email,a.organization].some(x=>x.toLowerCase().includes(q.toLowerCase())))
  const one=selected.length===1?applicants.find(a=>a.id===selected[0]):null
  const toggle=(id:string)=>setSelected(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id])
@@ -34,10 +35,10 @@ export function AccessManager({reload,roomId,roomStatus,canPublishRoom,applicant
    <div className="am-work">
     <section className="am-card"><h3><ShieldCheck size={18}/>Attribuer des droits {selected.length>0&&<span className="am-count">{selected.length} investisseur{selected.length>1?'s':''}</span>}</h3>
      <div className="am-presets"><span className="am-label">Profils rapides</span>{[
-      {label:'Découverte',hint:'Rubriques générales, 14 jours, sans documents',build:()=>({t:sections.filter(x=>/african|pourquoi|klassci|wouri|équipe|technolog/i.test(x.title)).map(x=>({capability:'section:read' as Cap,resourceId:x.id})),days:14})},
-      {label:'Due diligence',hint:'Toute la salle + consultation des documents, 30 jours',build:()=>({t:[{capability:'room:read' as Cap},...documents.map(d=>({capability:'document:read' as Cap,resourceId:d.id}))],days:30})},
-      {label:'Due diligence + téléchargement',hint:'Comme ci-dessus, avec téléchargement, 30 jours',build:()=>({t:[{capability:'room:read' as Cap},...documents.flatMap(d=>[{capability:'document:read' as Cap,resourceId:d.id},{capability:'document:download' as Cap,resourceId:d.id}])],days:30})},
-      {label:'Investisseur',hint:'Toute la salle et les documents, sans date de fin',build:()=>({t:[{capability:'room:read' as Cap},...documents.map(d=>({capability:'document:read' as Cap,resourceId:d.id}))],days:0})},
+      {label:'Découverte',hint:'Rubriques générales, 14 jours, sans documents',build:()=>({t:roomAndSections(sections.filter(x=>/african|pourquoi|klassci|wouri|équipe|technolog/i.test(x.title))),days:14})},
+      {label:'Due diligence',hint:'Toute la salle + consultation des documents, 30 jours',build:()=>({t:[...roomAndSections(sections),...documents.map(d=>({capability:'document:read' as Cap,resourceId:d.id}))],days:30})},
+      {label:'Due diligence + téléchargement',hint:'Comme ci-dessus, avec téléchargement, 30 jours',build:()=>({t:[...roomAndSections(sections),...documents.flatMap(d=>[{capability:'document:read' as Cap,resourceId:d.id},{capability:'document:download' as Cap,resourceId:d.id}])],days:30})},
+      {label:'Investisseur',hint:'Toute la salle et les documents, sans date de fin',build:()=>({t:[...roomAndSections(sections),...documents.map(d=>({capability:'document:read' as Cap,resourceId:d.id}))],days:0})},
      ].map(p=><button key={p.label} type="button" title={p.hint} onClick={()=>{const r=p.build();setTargets(r.t.length?r.t:[{capability:'room:read'}]);setEffect('allow');const today=new Date();setFrom(today.toISOString().slice(0,10));setTo(r.days?new Date(today.getTime()+r.days*864e5).toISOString().slice(0,10):'')}}><b>{p.label}</b><small>{p.hint}</small></button>)}</div>
      <TargetPicker sections={sections} documents={documents} value={targets} onChange={setTargets}/>
      <div className="am-row"><div className="pe-seg" role="group" aria-label="Effet"><button aria-pressed={effect==='allow'} onClick={()=>setEffect('allow')}>Autoriser</button><button aria-pressed={effect==='deny'} onClick={()=>setEffect('deny')}>Refuser</button></div>
@@ -55,7 +56,8 @@ function TargetPicker({sections,documents,value,onChange}:{sections:Item[];docum
  const has=(t:Target)=>value.some(v=>key(v)===key(t)),flip=(t:Target)=>onChange(has(t)?value.filter(v=>key(v)!==key(t)):[...value,t])
  const Row=({t,icon,text}:{t:Target;icon:React.ReactNode;text:string})=><label className={'am-target'+(has(t)?' is-on':'')}><input type="checkbox" checked={has(t)} onChange={()=>flip(t)}/>{icon}<span>{text}</span></label>
  return <div className="am-targets">
-  <Row t={{capability:'room:read'}} icon={<Globe2 size={15}/>} text="Salle entière (toutes les rubriques publiées)"/>
+  <Row t={{capability:'room:read'}} icon={<Globe2 size={15}/>} text="Entrée dans la salle (sélectionner aussi les rubriques ou documents)"/>
+  {sections.length>0&&<button type="button" className="dr-btn ghost" onClick={()=>onChange([...roomAndSections(sections),...value.filter(t=>t.capability.startsWith('document:'))])}>Sélectionner l’entrée et toutes les rubriques actuelles</button>}
   {sections.length>0&&<details open><summary>Rubriques ({sections.length})</summary>{sections.map(s=><Row key={s.id} t={{capability:'section:read',resourceId:s.id}} icon={<LayoutList size={15}/>} text={s.title}/>)}</details>}
   {documents.length>0&&<details open><summary>Documents ({documents.length})</summary>{documents.map(d=><div className="am-docrow" key={d.id}><span><FileText size={15}/>{d.title}</span><Row t={{capability:'document:read',resourceId:d.id}} icon={<Eye size={14}/>} text="Consulter"/><Row t={{capability:'document:download',resourceId:d.id}} icon={<Download size={14}/>} text="Télécharger"/></div>)}</details>}
  </div>
@@ -72,6 +74,7 @@ function Groups({roomId,applicants,groups,busy,run}:{roomId:string;applicants:Ap
 function Links({reload,roomId,sections,documents,links,label,busy,run,createLink}:{reload:()=>Promise<void>;roomId:string;sections:Item[];documents:Item[];links:LinkRow[];label:(t:Target)=>string;busy:boolean;run:(c:AdminCommand)=>Promise<void>;createLink:(d:{label:string;targets:Target[];email?:string;startsAt:number;expiresAt:number;grantUntil?:number;maxUses:number})=>Promise<{url:string;link?:LinkRow}|null>}){
  const today=new Date().toISOString().slice(0,10),week=new Date(Date.now()+7*86400000).toISOString().slice(0,10)
  const [f,setF]=useState({label:'',email:'',from:today,to:week,until:'',uses:1}),[targets,setTargets]=useState<Target[]>([{capability:'room:read'}]),[url,setUrl]=useState<string|null>(null),[err,setErr]=useState(false),[copied,setCopied]=useState(false),[working,setWorking]=useState(false)
+ const hasRoom=targets.some(t=>t.capability==='room:read'),hasContent=targets.some(t=>t.capability==='section:read'||t.capability==='document:read')
  const sorted=useMemo(()=>[...links].sort((a,b)=>Number(b.active)-Number(a.active)),[links])
  async function create(){setWorking(true);setErr(false);setUrl(null);setCopied(false);const r=await createLink({label:f.label,targets,email:f.email||undefined,startsAt:new Date(f.from+'T00:00:00').getTime(),expiresAt:new Date(f.to+'T23:59:59').getTime(),grantUntil:f.until?new Date(f.until+'T23:59:59').getTime():undefined,maxUses:f.uses}).catch(()=>null);setWorking(false);if(r){setUrl(r.url);try{if(!r.link)await reload()}catch{/* The confirmed link stays available even if listing refresh fails. */}}else setErr(true)}
  return <div className="am-grid wide">
@@ -80,7 +83,8 @@ function Links({reload,roomId,sections,documents,links,label,busy,run,createLink
     <label><Clock size={14}/>Lien valable du<input type="date" value={f.from} onChange={e=>setF({...f,from:e.target.value})}/></label><label>au<input type="date" value={f.to} onChange={e=>setF({...f,to:e.target.value})}/></label>
     <label>Accès accordé jusqu’au (facultatif)<input type="date" value={f.until} onChange={e=>setF({...f,until:e.target.value})}/></label><label>Utilisations maximum<input type="number" min={1} max={500} value={f.uses} onChange={e=>setF({...f,uses:Math.max(1,Math.min(500,Number(e.target.value)||1))})}/></label></div>
    <p className="am-label">Ce que le lien ouvre</p><TargetPicker sections={sections} documents={documents} value={targets} onChange={setTargets}/>
-   <button className="dr-btn" disabled={working||busy||!f.label.trim()||!targets.length} onClick={()=>void create()}><Link2 size={16}/>Générer le lien</button>
+   <button className="dr-btn" disabled={working||busy||!f.label.trim()||!hasRoom} onClick={()=>void create()}><Link2 size={16}/>Générer le lien</button>
+   {!hasRoom&&<p role="alert" className="am-help">Sélectionnez l’entrée dans la salle pour rendre ce lien utilisable.</p>}{hasRoom&&!hasContent&&<p className="am-help">Ce lien ouvre seulement l’entrée : aucune rubrique ni consultation de document n’est sélectionnée.</p>}
    {err&&<p role="alert" className="frame-status error">Création impossible : vérifiez les dates et le périmètre.</p>}
    {url&&<div className="am-url"><p><b>Lien investisseur prêt.</b> Il est répertorié dans Accès &amp; invitations, pas dans Équipe ADC. Le lien complet ne sera plus affiché : copiez-le maintenant. L’investisseur devra vérifier son adresse e-mail avant d’accéder.</p><code>{url}</code><button className="dr-btn ghost" onClick={()=>{void navigator.clipboard?.writeText(url).then(()=>setCopied(true))}}>{copied?<Check size={15}/>:<Copy size={15}/>}{copied?'Copié':'Copier'}</button></div>}
   </section>
