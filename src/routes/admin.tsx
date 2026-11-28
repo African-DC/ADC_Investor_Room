@@ -20,6 +20,9 @@ const AdminRoom=lazy(()=>import('../features/admin/AdminRoom').then(m=>({default
 import { JourneyFrame } from '../features/onboarding/JourneyFrame'
 import { useEffect,useState,useCallback } from 'react'
 const MfaGate=lazy(()=>import('../features/admin/MfaGate').then(m=>({default:m.MfaGate})))
+const LiveEmailLog=lazy(()=>import('../features/admin/LivePanels').then(m=>({default:m.LiveEmailLog})))
+const LiveCrm=lazy(()=>import('../features/admin/LivePanels').then(m=>({default:m.LiveCrm})))
+const LiveAnalytics=lazy(()=>import('../features/admin/LivePanels').then(m=>({default:m.LiveAnalytics})))
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 // Admin UI is allowed wherever the flag is on: every privileged Convex call enforces session-bound TOTP MFA.
 // A missing capability for one panel must not break the whole back office.
@@ -34,10 +37,10 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   if(!await bridge.getToken())return {problem:'signin' as const}
   stage='bootstrap'
   const roomId=data.roomId as Id<'rooms'>|undefined
-  let result=await bridge.fetchAuthQuery(api.adminPanels.bootstrap,{roomId})
+  let result=await bridge.fetchAuthQuery(api.adminPanels.bootstrap,{roomId,deferHeavy:liveConvexEnabled()})
   if(result.kind==='claim'){
    stage='invitation-claim';await bridge.fetchAuthMutation(api.team.claim,{})
-   stage='bootstrap';result=await bridge.fetchAuthQuery(api.adminPanels.bootstrap,{roomId,skipClaim:true})
+   stage='bootstrap';result=await bridge.fetchAuthQuery(api.adminPanels.bootstrap,{roomId,skipClaim:true,deferHeavy:liveConvexEnabled()})
   }
   if(result.kind==='mfa')return {mfa:result.mfa} as const
   if(result.kind!=='ready')return {problem:'membership' as const}
@@ -174,20 +177,17 @@ function SocketAdmin(props:ComponentProps<typeof AdminRoom>){
   const update=()=>{try{const value=watch.localQueryResult();if(value)onResult({kind:'verified',capabilities:value.capabilities})}catch(error){const failure=safeAuthFailure(error);onResult({kind:failure.kind==='mfa-required'||failure.kind==='unauthenticated'?'denied':'temporary'})}}
   const stop=watch.onUpdate(update);update();return stop
  },[client,ready,roomId])
- const subscribeEmails=useCallback<NonNullable<ComponentProps<typeof AdminRoom>['subscribeEmails']>>(onResult=>{
-  if(!ready)return ()=>{}
-  const watch=client.watchQuery(api.outbox.list,{roomId})
-  const update=()=>{try{const rows=watch.localQueryResult();if(rows)onResult(rows)}catch{/* permissions checked by session watcher; do not display unverified updates */}}
-  const stop=watch.onUpdate(update);update();return stop
- },[client,ready,roomId])
  const reload:ComponentProps<typeof AdminRoom>['reload']=async()=>{
   if(!ready)throw Error('Connection unavailable')
-  const result=await client.query(api.adminPanels.bootstrap,{roomId,skipClaim:true,nonce:Date.now()})
+  const result=await client.query(api.adminPanels.bootstrap,{roomId,skipClaim:true,nonce:Date.now(),deferHeavy:true})
   if(result.kind!=='ready')return null
   const {identity,dashboard,panels}=result
   return {identity,dashboard:{...props.initial.dashboard,...dashboard,...panels,metrics:panels.metrics??[],contacts:panels.contacts??[],questions:panels.questions??[]}}
  }
- return <AdminRoom {...props} verifySession={verifySession} subscribeSession={subscribeSession} subscribeEmails={subscribeEmails} reload={reload}
+ return <AdminRoom {...props} verifySession={verifySession} subscribeSession={subscribeSession} reload={reload}
+   renderEmails={panel=><LiveEmailLog {...panel}/>}
+   renderCrm={panel=><LiveCrm {...panel}/>}
+   renderAnalytics={id=><LiveAnalytics roomId={id}/>}
    createLink={async input=>{if(!ready)return null;const parsed=linkInput.safeParse({...input,roomId});if(!parsed.success)return null;const data=parsed.data;try{const r=await client.action(api.access.createLink,{...data,roomId});return r?{url:location.origin+'/invite#'+r.token,link:{id:r.id,label:data.label,targets:data.targets,email:data.email?.toLowerCase()??null,startsAt:data.startsAt,expiresAt:data.expiresAt,grantUntil:data.grantUntil??null,maxUses:data.maxUses,uses:0,active:data.startsAt<=Date.now()&&data.expiresAt>Date.now(),revoked:false}}:null}catch{return null}}}
    
    touch={async()=>{if(!ready)throw Error('Connection unavailable');return client.mutation(api.mfa.touch,{})}}

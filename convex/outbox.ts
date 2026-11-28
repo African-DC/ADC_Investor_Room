@@ -3,7 +3,8 @@ import type {QueryCtx} from './_generated/server'
 // Status is "sent" only after Resend accepted the message; failures keep their reason.
 import { internalAction,internalMutation,internalQuery,mutation,query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
-import type { Id } from './_generated/dataModel'
+import type { Id,Doc } from './_generated/dataModel'
+import {paginationOptsValidator,type PaginationOptions} from 'convex/server'
 import { internal } from './_generated/api'
 import { v } from 'convex/values'
 import { authComponent,createAuth } from './auth'
@@ -85,9 +86,18 @@ export const sweep=internalMutation({args:{},handler:async ctx=>{
  return n
 }})
 export const forRoom=internalQuery({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>ctx.db.query('emailOutbox').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)})
+const emailRow=(r:Doc<'emailOutbox'>)=>({id:r._id,kind:r.kind,to:r.to,subject:r.subject,status:r.status,attempts:r.attempts,lastError:r.lastError??null,createdAt:r.createdAt,sentAt:r.sentAt??null})
+export async function readEmailPage(ctx:QueryCtx,roomId:Id<'rooms'>,paginationOpts:PaginationOptions){
+ if(!Number.isSafeInteger(paginationOpts.numItems)||paginationOpts.numItems<1||paginationOpts.numItems>50)throw Error('Invalid page size')
+ const result=await ctx.db.query('emailOutbox').withIndex('by_room',q=>q.eq('roomId',roomId)).order('desc').paginate(paginationOpts)
+ return {...result,page:result.page.map(emailRow)}
+}
+export const page=query({args:{roomId:v.id('rooms'),paginationOpts:paginationOptsValidator},handler:async(ctx,a)=>{
+ await admin(ctx,a.roomId,'access:manage');return readEmailPage(ctx,a.roomId,a.paginationOpts)
+}})
 export async function readEmails(ctx:QueryCtx,a:{roomId:Id<'rooms'>}){
 
- return (await ctx.db.query('emailOutbox').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)).map(r=>({id:r._id,kind:r.kind,to:r.to,subject:r.subject,status:r.status,attempts:r.attempts,lastError:r.lastError??null,createdAt:r.createdAt,sentAt:r.sentAt??null}))
+ return (await ctx.db.query('emailOutbox').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)).map(emailRow)
 }
 export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{await admin(ctx,a.roomId,'access:manage');return readEmails(ctx,a)}})
 export const retry=mutation({args:{roomId:v.id('rooms'),id:v.id('emailOutbox')},handler:async(ctx,a)=>{
