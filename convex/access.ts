@@ -60,8 +60,10 @@ export const saveGroup=mutation({args:{roomId:v.id('rooms'),groupId:v.optional(v
 export const deleteGroup=mutation({args:{roomId:v.id('rooms'),groupId:v.id('investorGroups')},handler:async(ctx,a)=>{
  await admin(ctx,a.roomId,'access:manage');const g=await ctx.db.get(a.groupId);if(!g||g.roomId!==a.roomId)throw new Error('Invalid group');await ctx.db.delete(g._id);return {ok:true}
 }})
-export const setRoomStatus=mutation({args:{roomId:v.id('rooms'),status:v.union(v.literal('draft'),v.literal('published'))},handler:async(ctx,a)=>{
- const {user}=await admin(ctx,a.roomId,'content:review');const room=await ctx.db.get(a.roomId);if(!room)throw new Error('Unavailable')
+export const setRoomStatus=mutation({args:{roomId:v.id('rooms'),status:v.union(v.literal('draft'),v.literal('published'),v.literal('archived'))},handler:async(ctx,a)=>{
+ const {user,membership}=await admin(ctx,a.roomId,'content:review');const room=await ctx.db.get(a.roomId);if(!room)throw new Error('Unavailable')
+ if((a.status==='archived'||room.status==='archived')&&!membership.capabilities.includes('access:manage'))throw Error('Unauthorized')
+ if(room.status==='archived'&&a.status==='published')throw Error('Restore the room to draft first')
  await ctx.db.patch(room._id,{status:a.status});await ctx.db.insert('auditLogs',{actorId:user._id,event:'room.'+a.status,resourceId:room._id,at:Date.now()});return {ok:true}
 }})
 export async function readAccess(ctx:QueryCtx,a:{roomId:Id<'rooms'>}){

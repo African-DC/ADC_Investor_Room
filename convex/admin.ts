@@ -50,7 +50,7 @@ export const rooms=query({args:{},handler:async ctx=>{
  const memberships=await ctx.db.query('stagingAdminMemberships').withIndex('by_user_room',q=>q.eq('authUserId',user._id)).take(101)
  if(memberships.length>100)throw new Error('Access review required')
  const rooms=[]
- for(const m of memberships){if(!hasAdminCapability(m,user._id,m.roomId))continue;const room=await ctx.db.get(m.roomId);if(room)rooms.push({id:room._id,name:room.name})}
+ for(const m of memberships){if(!hasAdminCapability(m,user._id,m.roomId))continue;const room=await ctx.db.get(m.roomId);if(room)rooms.push({id:room._id,name:room.name,status:room.status})}
  return rooms.length?{name:user.name,rooms}:null
 }})
 export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
@@ -87,7 +87,7 @@ export const dashboard=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>
   }
  }
  const images=await imagesFor(ctx,room._id,sections.flatMap(s=>s.latest?[...imageIdsIn(s.latest.blocksFr),...imageIdsIn(s.latest.blocksEn)]:[]))
- return {room:{id:room._id,name:room.name,status:room.status},capabilities,applicants,sections,documents,images}
+ return {room:{id:room._id,name:room.name,description:room.description??'',status:room.status},capabilities,applicants,sections,documents,images}
 }})
 export const grant=mutation({args:{roomId:v.id('rooms'),profileId:v.id('investorProfiles'),capability:v.union(v.literal('room:read'),v.literal('section:read')),sectionId:v.optional(v.id('sections')),effect:v.union(v.literal('allow'),v.literal('deny')),expiresAt:v.optional(v.number())},handler:async(ctx,a):Promise<Id<'accessGrants'>>=>{
  const {user}=await admin(ctx,a.roomId,'access:manage')
@@ -135,4 +135,36 @@ export const grantDocument=mutation({args:{roomId:v.id('rooms'),profileId:v.id('
 export const technicalAccess=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
  const {membership}=await admin(ctx,a.roomId,'technical:read')
  return {canDraft:membership.capabilities.includes('content:edit')}
+}})
+
+// Room lifecycle: identity and MFA are verified by the public wrappers; a creator cannot escalate its source membership.
+function roomName(value:string){const name=value.trim();if(!name||name.length>160)throw Error('Invalid room name');return name}
+function roomDescription(value:string){const description=value.trim();if(description.length>1000)throw Error('Invalid room description');return description}
+export async function createRoomForActor(ctx:MutationCtx,sourceId:Id<'rooms'>,actorId:string,nameInput:string,descriptionInput:string){
+ const source=await ctx.db.get(sourceId)
+ const membership=await ctx.db.query('stagingAdminMemberships').withIndex('by_user_room',q=>q.eq('authUserId',actorId).eq('roomId',sourceId)).unique()
+ if(!source||source.status==='archived'||!hasAdminCapability(membership,actorId,sourceId,'access:manage')||!hasAdminCapability(membership,actorId,sourceId,'content:review'))throw Error('Unauthorized')
+ const name=roomName(nameInput),description=roomDescription(descriptionInput)
+ const existing=await ctx.db.query('rooms').withIndex('by_organization',q=>q.eq('organizationId',source.organizationId)).filter(q=>q.eq(q.field('name'),name)).first()
+ if(existing)throw Error('Room name already used')
+ const roomId=await ctx.db.insert('rooms',{organizationId:source.organizationId,name,description,status:'draft'})
+ await ctx.db.insert('stagingAdminMemberships',{authUserId:actorId,roomId,capabilities:[...new Set(membership!.capabilities)]})
+ await ctx.db.insert('auditLogs',{actorId,event:'room.created',resourceId:roomId,at:Date.now()})
+ return roomId
+}
+export const createRoom=mutation({args:{roomId:v.id('rooms'),name:v.string(),description:v.string()},handler:async(ctx,a)=>{
+ const {user}=await admin(ctx,a.roomId,'access:manage')
+ return createRoomForActor(ctx,a.roomId,user._id,a.name,a.description)
+}})
+export const updateRoom=mutation({args:{roomId:v.id('rooms'),name:v.string(),description:v.string()},handler:async(ctx,a)=>{
+ const {user}=await admin(ctx,a.roomId,'access:manage')
+ const room=await ctx.db.get(a.roomId);if(!room)throw Error('Unavailable')
+ const name=roomName(a.name),description=roomDescription(a.description)
+ if(name!==room.name){
+  const prior=await ctx.db.query('rooms').withIndex('by_organization',q=>q.eq('organizationId',room.organizationId)).filter(q=>q.eq(q.field('name'),name)).first()
+  if(prior&&prior._id!==room._id)throw Error('Room name already used')
+ }
+ await ctx.db.patch(room._id,{name,description})
+ await ctx.db.insert('auditLogs',{actorId:user._id,event:'room.settings_updated',resourceId:room._id,at:Date.now()})
+ return {id:room._id,name,description,status:room.status}
 }})

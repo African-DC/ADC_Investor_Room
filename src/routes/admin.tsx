@@ -79,6 +79,8 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
    case 'revokeMany':await bridge.fetchAuthMutation(api.access.revokeMany,{roomId,grantIds:data.grantIds as Id<'accessGrants'>[]});break
    case 'saveGroup':await bridge.fetchAuthMutation(api.access.saveGroup,{roomId,groupId:data.groupId as Id<'investorGroups'>|undefined,name:data.name,profileIds:data.profileIds as Id<'investorProfiles'>[]});break
    case 'deleteGroup':await bridge.fetchAuthMutation(api.access.deleteGroup,{roomId,groupId:data.groupId as Id<'investorGroups'>});break
+   case 'roomCreate':return {ok:true,roomCreatedId:await bridge.fetchAuthMutation(api.admin.createRoom,{roomId,name:data.name,description:data.description})}
+   case 'roomUpdate':return {ok:true,roomUpdated:await bridge.fetchAuthMutation(api.admin.updateRoom,{roomId,name:data.name,description:data.description})}
    case 'roomStatus':await bridge.fetchAuthMutation(api.access.setRoomStatus,{roomId,status:data.status});break
    case 'manualReview':await bridge.fetchAuthMutation(api.documents.attestManualReview,{roomId,documentId:data.documentId as Id<'documents'>,sha256:data.sha256,verdict:data.verdict});break
    case 'teamInvite':return {ok:true,invite:await bridge.fetchAuthMutation(api.team.inviteWithReceipt,{roomId,email:data.email,capabilities:data.capabilities})}
@@ -92,7 +94,7 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
    case 'archive':await bridge.fetchAuthMutation(api.admin.archive,{roomId,sectionId:data.sectionId as Id<'sections'>});break
   }
   return {ok:true}
- }catch(error){const failure=safeAuthFailure(error);console.warn('[adc:admin] command failed',{command:data.kind,...failure});return {ok:false,reason:failure.kind}}
+ }catch(error){const failure=safeAuthFailure(error);console.warn('[adc:admin] command failed',{command:data.kind,...failure});return {ok:false,reason:error instanceof Error&&error.message.includes('Room name already used')?'room-name-used':failure.kind}}
 })
 const history=createServerFn({method:'GET'}).validator(z.object({roomId:z.string().max(128),profileId:z.string().max(128)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
