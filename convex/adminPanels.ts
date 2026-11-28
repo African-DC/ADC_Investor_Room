@@ -11,7 +11,7 @@ import {readContacts} from './crm'
 import {readQuestions} from './qa'
 import {readAnalytics} from './analytics'
 import {readAccess} from './access'
-import {readTeam} from './team'
+import {readTeam,activeInvites} from './team'
 import {readEmails} from './outbox'
 import {readNda} from './nda'
 async function safe<T>(panel:string,read:()=>Promise<T>):Promise<T|null>{try{return await read()}catch{console.warn('[adc:panel] read failed',{panel});return null}}
@@ -35,8 +35,8 @@ export const bootstrap=query({args:{roomId:v.optional(v.id('rooms')),skipClaim:v
  if(!a.skipClaim&&(!mfa||!a.roomId)){
   const user=await authComponent.safeGetAuthUser(ctx)
   if(user?.emailVerified){
-   const invites=await ctx.db.query('adminInvites').withIndex('by_email',q=>q.eq('email',user.email.trim().toLowerCase())).take(101)
-   if(invites.some(i=>!i.acceptedAt&&!i.revokedAt&&i.expiresAt>Date.now()))return {kind:'claim' as const}
+   const invite=await activeInvites(ctx,user.email,Date.now()).first()
+   if(invite)return {kind:'claim' as const}
   }
  }
  if(!mfa)return {kind:'membership' as const}
