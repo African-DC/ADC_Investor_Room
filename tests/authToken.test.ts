@@ -12,3 +12,5 @@ describe('request-scoped auth token exchange',()=>{
 })
 
 it('classifies real Convex HTTP throttling and honors a bounded retry delay without exposing the response',async()=>{const {convexFetch,safeAuthFailure}=await import('../src/lib/auth-token');const request=vi.fn<typeof fetch>().mockResolvedValue(new Response('private response',{status:429,headers:{'retry-after':'90'}}));try{await convexFetch('https://example.convex.cloud/api/query',{},request);throw Error('Expected rate limit')}catch(error){expect(safeAuthFailure(error)).toEqual({kind:'rate-limit',status:429,retryAfterSeconds:90})}expect(request).toHaveBeenCalledTimes(1)})
+
+it('does not misclassify a request id containing 429 as a rate limit',()=>{expect(safeAuthFailure(new Error('[Request ID: a429bc] Server Error'))).toEqual({kind:'backend-error'});expect(safeAuthFailure(new Error('HTTP 429 Too Many Requests'))).toEqual({kind:'rate-limit'})})

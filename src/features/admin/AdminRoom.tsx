@@ -13,6 +13,7 @@ import { PageEditor } from '../blocks/PageEditor'
 import { AccessManager } from './AccessManager'
 import { DocumentsPanel } from './DocumentsPanel'
 import { TeamPanel } from './TeamPanel'
+import type { Invite } from './TeamPanel'
 import { EmailLog } from './EmailLog'
 import { NdaPanel } from './NdaPanel'
 import type { NdaState } from './NdaPanel'
@@ -30,27 +31,51 @@ type Applicant={id:string;name:string;email:string;organization:string;grants:Gr
 type Section={id:string;slug:string;category:string;order:number;published:boolean;latest:{id:string;number:number;state:string;titleFr:string;titleEn:string;bodyFr:string;bodyEn:string;source:string;own:boolean}|null}
 type DocumentItem={id:string;titleFr:string;titleEn:string;category:string;status:string;version:{id:string;number:number;scanStatus:string;scanMethod?:string|null;sha256?:string;sizeBytes:number;own:boolean}|null}
 type State={identity:{name:string;rooms:{id:string;name:string}[]};dashboard:{room:{id:string;name:string;status:string};capabilities:string[];applicants:Applicant[];sections:Section[];documents:DocumentItem[];metrics:AdminMetric[];uploadEnabled:boolean;manualScan?:boolean;nda?:NdaState|null;emails?:{id:string;kind:string;to:string;subject:string;status:string;attempts:number;lastError:string|null;createdAt:number;sentAt:number|null}[]|null;team?:{members:{id:string;name:string;email:string;capabilities:string[];revoked:boolean;self:boolean}[];invites:{id:string;email:string;capabilities:string[];createdAt:number;expiresAt:number;status:string}[]}|null;images?:Record<string,{src:string;width:number;height:number}>;contacts:Contact[];questions:Question[];analytics:AnalyticsResult|null;technicalTargets:{key:string;label:string}[];access:{groups:{id:string;name:string;profileIds:string[]}[];links:{id:string;label:string;targets:{capability:string;resourceId?:string}[];email:string|null;startsAt:number;expiresAt:number;grantUntil:number|null;maxUses:number;uses:number;active:boolean;revoked:boolean}[]}|null}}
-export function AdminRoom({initial,reload,touch,command,history,questionRead,technical,createLink,reviewUrl,uploadImage}:{initial:State;touch:()=>Promise<{ok:boolean}>;reload:()=>Promise<State|null>;command:(data:AdminCommand)=>Promise<{ok:boolean}>;history:(id:string)=>Promise<HistoryEvent[]|null>;questionRead:(id:string)=>Promise<Thread|null>;technical:(key:string,draft:boolean)=>Promise<TechnicalResult|null>;createLink:Parameters<typeof AccessManager>[0]['createLink'];reviewUrl:(documentId:string)=>Promise<string|null>;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
+export function AdminRoom({initial,reload,touch,command,history,questionRead,technical,createLink,reviewUrl,uploadImage}:{initial:State;touch:()=>Promise<{ok:boolean}>;reload:()=>Promise<State|null>;command:(data:AdminCommand)=>Promise<{ok:boolean;invite?:Invite}>;history:(id:string)=>Promise<HistoryEvent[]|null>;questionRead:(id:string)=>Promise<Thread|null>;technical:(key:string,draft:boolean)=>Promise<TechnicalResult|null>;createLink:Parameters<typeof AccessManager>[0]['createLink'];reviewUrl:(documentId:string)=>Promise<string|null>;uploadImage:(f:{dataUrl:string;width:number;height:number})=>Promise<string|null>}){
  const [data,setData]=useState<State|null>(initial),[busy,setBusy]=useState(false),[view,setView]=useState('dashboard'),[menu,setMenu]=useState(false),[palette,setPalette]=useState(false)
- const seq=useRef(0),lastTouch=useRef(0),touching=useRef(false),lastVerified=useRef(Date.now())
- const [connectionWarning,setConnectionWarning]=useState(false)
- useEffect(()=>{let alive=true;const activity=(event:Event)=>{if(!event.isTrusted||document.visibilityState!=='visible'||touching.current||Date.now()-lastTouch.current<120000)return;touching.current=true;lastTouch.current=Date.now();void touch().then(async r=>{if(!r.ok){if(alive)setData(null);return}const session=await authClient.getSession();if(session.error)throw Error('Session refresh unavailable');if(alive&&!session.data)setData(null)}).catch(()=>{if(alive)setConnectionWarning(true)}).finally(()=>{touching.current=false})};const events=['pointerdown','keydown','wheel','touchstart'] as const;for(const event of events)window.addEventListener(event,activity,{passive:true});return()=>{alive=false;for(const event of events)window.removeEventListener(event,activity)}},[touch])
+ const seq=useRef(0),lastTouch=useRef(Date.now()),touching=useRef(false),lastVerified=useRef(Date.now()),operation=useRef(false),cooldown=useRef(0)
+ const [connectionWarning,setConnectionWarning]=useState(false),[retrying,setRetrying]=useState(false)
+ useEffect(()=>{let alive=true;const activity=(event:Event)=>{if(!event.isTrusted||document.visibilityState!=='visible'||touching.current||operation.current||Date.now()<cooldown.current||Date.now()-lastTouch.current<120000)return;touching.current=true;lastTouch.current=Date.now();void touch().then(async r=>{if(!r.ok){if(alive)setData(null);return}const session=await authClient.getSession();if(session.error)throw Error('Session refresh unavailable');if(alive&&!session.data)setData(null)}).catch(()=>{cooldown.current=Date.now()+60000;if(alive)setConnectionWarning(true)}).finally(()=>{touching.current=false})};const events=['pointerdown','keydown','wheel','touchstart'] as const;for(const event of events)window.addEventListener(event,activity,{passive:true});return()=>{alive=false;for(const event of events)window.removeEventListener(event,activity)}},[touch])
  // The URL fragment is client-only: read it after mount (no SSR mismatch) and follow back/forward.
  useEffect(()=>{const sync=()=>{const h=location.hash.slice(1);if(h)setView(h)};sync();window.addEventListener('hashchange',sync);return()=>window.removeEventListener('hashchange',sync)},[])
- async function run(data:AdminCommand){setBusy(true);seq.current++
-  try{const result=await command(data);if(!result.ok)throw Error('Denied');const token=++seq.current;const next=await reload().catch(()=>null);if(token===seq.current&&next){lastVerified.current=Date.now();setData(next)};toast.success(success[data.kind]??'Modification enregistrée')}catch{toast.error('Action refusée',{description:'Vérifiez vos droits, les dates ou les champs, puis réessayez.'})}finally{setBusy(false)}
+ async function run(data:AdminCommand,onSuccess?:()=>void){
+  if(operation.current||touching.current){toast.error('Actualisation en cours',{description:'Réessayez après la fin de la vérification.'});return}
+  operation.current=true;setBusy(true);seq.current++
+  try{
+   const result=await command(data)
+   if(!result.ok)throw Error('Denied')
+   if(result.invite){
+    const receipt=result.invite
+    lastVerified.current=Date.now()
+    setData(prev=>prev?{...prev,dashboard:{...prev.dashboard,team:prev.dashboard.team?{...prev.dashboard.team,invites:[receipt,...prev.dashboard.team.invites.filter(i=>i.id!==receipt.id).map(i=>i.email===receipt.email&&i.status==='pending'?{...i,status:'revoked'}:i)].slice(0,100)}:null}}:null)
+    onSuccess?.()
+    toast.success('Invitation créée',{description:'Enregistrée. L’envoi de l’e-mail est suivi séparément.'})
+    return
+   }
+   onSuccess?.()
+   toast.success(success[data.kind]??'Modification enregistrée')
+   const token=++seq.current
+   try{const next=await reload();if(token===seq.current){if(next){lastVerified.current=Date.now();setData(next);setConnectionWarning(false)}else setData(null)}}catch{cooldown.current=Date.now()+60000;setConnectionWarning(true)}
+  }catch{toast.error('Action non confirmée',{description:'Vérifiez vos droits ou actualisez la liste avant de réessayer.'})}
+  finally{operation.current=false;setBusy(false)}
  }
+ async function retry(){
+  if(operation.current||touching.current||Date.now()<cooldown.current)return
+  operation.current=true;setRetrying(true);const token=++seq.current
+  try{const next=await reload();if(token===seq.current){if(next){lastVerified.current=Date.now();setData(next);setConnectionWarning(false)}else setData(null)}}catch{cooldown.current=Date.now()+60000;setConnectionWarning(true)}finally{operation.current=false;setRetrying(false)}
+ }
+
  // Single-flight refresh, no burst on focus, no automatic retries against a throttled backend.
  const refreshRef=useRef(reload),busyRef=useRef(busy)
  useEffect(()=>{refreshRef.current=reload;busyRef.current=busy},[reload,busy])
  useEffect(()=>{
   let alive=true,inFlight=false,lastStart=Date.now(),nextAllowed=0
   async function refresh(){
-   if(!alive||inFlight||busyRef.current||touching.current||document.visibilityState!=='visible'||Date.now()<nextAllowed||Date.now()-lastStart<45000)return
-   inFlight=true;lastStart=Date.now();const token=++seq.current
+   if(!alive||inFlight||busyRef.current||operation.current||touching.current||Date.now()<cooldown.current||document.visibilityState!=='visible'||Date.now()<nextAllowed||Date.now()-lastStart<45000)return
+   inFlight=true;operation.current=true;lastStart=Date.now();const token=++seq.current
    try{const next=await refreshRef.current();if(!alive||seq.current!==token)return;if(next){lastVerified.current=Date.now();setConnectionWarning(false);setData(next)}else{alive=false;seq.current++;setData(null)}}
-   catch(error){nextAllowed=Date.now()+60000;if(alive&&seq.current===token)setConnectionWarning(true);void error}
-   finally{inFlight=false}
+   catch(error){nextAllowed=Date.now()+60000;cooldown.current=nextAllowed;if(alive&&seq.current===token)setConnectionWarning(true);void error}
+   finally{inFlight=false;operation.current=false}
   }
   const checkAge=()=>{if(alive&&Date.now()-lastVerified.current>=90000){alive=false;seq.current++;setData(null)}}
   const timer=window.setInterval(()=>{checkAge();if(alive)void refresh()},5000)
@@ -98,7 +123,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
   </aside>
   <button className="adm-scrim" aria-label="Fermer le menu" tabIndex={menu?0:-1} onClick={()=>setMenu(false)}/>
   <main className="adm-main">
-    {connectionWarning&&<div className="session-warning" role="status">Connexion temporairement perturbée. Votre session n’a pas été fermée. <button type="button" onClick={()=>{void reload().then(next=>{if(next){setData(next);setConnectionWarning(false)}}).catch(()=>{})}}>Réessayer</button></div>}
+    {connectionWarning&&<div className="session-warning" role="status"><span>Actualisation temporairement indisponible. Les données affichées peuvent dater de la dernière vérification.</span><button type="button" disabled={retrying||busy} onClick={()=>void retry()}>{retrying?'Vérification…':'Réessayer'}</button></div>}
    <header className="adm-top"><button className="dr-icon adm-burger" aria-label="Ouvrir le menu" onClick={()=>setMenu(true)}><Menu size={19}/></button>
     <div className="adm-title"><h1>{current.label}</h1><p>{current.desc}</p></div>
     <div className="adm-actions">
@@ -131,11 +156,11 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
        {(has('content:edit')||has('content:review'))&&<button onClick={()=>go('documents')}><FolderLock size={18}/><span><b>Documents</b><small>Bibliothèque privée</small></span></button>}
       </div></section>
      </div></div>}
-    {current.key==='team'&&<TeamPanel roomId={roomId} members={d.team?.members??[]} invites={d.team?.invites??[]} myCaps={d.capabilities} busy={busy} run={run}/>}
+    {current.key==='team'&&(d.team?<TeamPanel roomId={roomId} members={d.team.members} invites={d.team.invites} myCaps={d.capabilities} busy={busy||retrying} run={run}/>:<section className="am-card" role="status"><h3>Liste de l’équipe indisponible</h3><p>Les invitations n’ont pas pu être chargées. Aucun résultat vide n’est confirmé.</p><button className="dr-btn" disabled={retrying||busy} onClick={()=>void retry()}>Actualiser l’équipe</button></section>)}
     {current.key==='emails'&&<EmailLog roomId={roomId} rows={d.emails??[]} busy={busy} run={run}/>}
     {current.key==='nda'&&<NdaPanel roomId={roomId} nda={d.nda??null} canPublish={has('content:review')} busy={busy} run={run}/>}
     {current.key==='pages'&&<PageEditor images={d.images} uploadImage={uploadImage} roomId={roomId} sections={d.sections} documents={d.documents} canEdit={has('content:edit')} canReview={has('content:review')} busy={busy} run={run}/>}
-    {current.key==='access'&&<AccessManager reload={async()=>{const token=++seq.current;const next=await reload();if(token===seq.current)setData(next)}} roomId={roomId} roomStatus={d.room.status} canPublishRoom={has('content:review')} applicants={d.applicants} sections={d.sections.map(s=>({id:s.id,title:s.latest?.titleFr??s.slug}))} documents={d.documents.map(x=>({id:x.id,title:x.titleFr}))} groups={d.access?.groups??[]} links={d.access?.links??[]} busy={busy} run={run} createLink={createLink}/>}
+    {current.key==='access'&&<AccessManager reload={async()=>{await retry()}} roomId={roomId} roomStatus={d.room.status} canPublishRoom={has('content:review')} applicants={d.applicants} sections={d.sections.map(s=>({id:s.id,title:s.latest?.titleFr??s.slug}))} documents={d.documents.map(x=>({id:x.id,title:x.titleFr}))} groups={d.access?.groups??[]} links={d.access?.links??[]} busy={busy} run={run} createLink={createLink}/>}
     {current.key==='finance'&&<div className="adm-legacy"><FinanceEditor roomId={roomId} sections={d.sections} documents={d.documents} metrics={d.metrics} canEdit={has('finance:edit')} canReview={has('finance:review')} busy={busy} run={run}/></div>}
     {current.key==='crm'&&<div className="adm-legacy"><CrmBoard roomId={roomId} contacts={d.contacts} canEdit={has('crm:edit')} busy={busy} run={run} history={history}/></div>}
     {current.key==='qa'&&<div className="adm-legacy"><Questions items={d.questions} admin canReply={has('qa:reply')} read={questionRead} send={async a=>{if(a.kind==='ask')return {ok:false};const result=await command(a.kind==='reply'?{kind:'qaReply',roomId,questionId:a.questionId,body:a.body}:{kind:'qaClose',roomId,questionId:a.questionId});if(result.ok){const token=++seq.current;const next=await reload();if(token===seq.current)setData(next)}return result}}/></div>}

@@ -24,7 +24,7 @@ export function safeAuthFailure(error:unknown){
  if(error instanceof ConvexThrottleError)return {kind:'rate-limit',status:429,retryAfterSeconds:error.retryAfterSeconds}
  if(error instanceof AuthTokenError)return {kind:error.reason,status:error.status}
  const message=error instanceof Error?error.message:''
- const kind=/MFA required/i.test(message)?'mfa-required':/unauthenticated|unauthorized|authentication required|not authenticated/i.test(message)?'unauthenticated':/could not find public function|function.*not found/i.test(message)?'missing-function':/conflict|optimistic concurrency|OCC/i.test(message)?'database-conflict':/429|rate limit/i.test(message)?'rate-limit':/timeout|fetch failed|network/i.test(message)?'network':'backend-error'
+ const kind=/MFA required/i.test(message)?'mfa-required':/unauthenticated|unauthorized|authentication required|not authenticated/i.test(message)?'unauthenticated':/could not find public function|function.*not found/i.test(message)?'missing-function':/conflict|optimistic concurrency|OCC/i.test(message)?'database-conflict':/\b(?:HTTP|status(?: code)?|response)\s*[:=]?\s*429\b|\brate[- ]limit(?:ed|ing)?\b|too many requests/i.test(message)?'rate-limit':/timeout|fetch failed|network/i.test(message)?'network':'backend-error'
  return {kind}
 }
 

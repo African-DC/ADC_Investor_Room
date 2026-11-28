@@ -1,7 +1,7 @@
 // ADC team management: explicit invitations (no self-enrolment), claimed only by the exact verified email, MFA still required afterwards.
 import { mutation,query,internalMutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
-import type { Id } from './_generated/dataModel'
+import type { Id,Doc } from './_generated/dataModel'
 import { v } from 'convex/values'
 import { authComponent } from './auth'
 import { admin } from './admin'
@@ -22,11 +22,21 @@ async function createInvite(ctx:MutationCtx,roomId:Id<'rooms'>,email:string,capa
 }
 /** Operator CLI bootstrap. */
 export const inviteInternal=internalMutation({args:{roomId:v.id('rooms'),email:v.string(),capabilities:v.array(v.string()),operatorId:v.string()},handler:(ctx,a)=>createInvite(ctx,a.roomId,a.email,a.capabilities,a.operatorId)})
+const inviteView=v.object({id:v.id('adminInvites'),email:v.string(),capabilities:v.array(v.string()),createdAt:v.number(),expiresAt:v.number(),status:v.string()})
+function viewInvite(i:Doc<'adminInvites'>,now:number){return {id:i._id,email:i.email,capabilities:i.capabilities,createdAt:i.createdAt,expiresAt:i.expiresAt,status:i.revokedAt?'revoked':i.acceptedAt?'accepted':i.expiresAt<=now?'expired':'pending'}}
 /** An admin may only delegate capabilities they hold themselves. */
 export const invite=mutation({args:{roomId:v.id('rooms'),email:v.string(),capabilities:v.array(v.string())},handler:async(ctx,a)=>{
  const {user,membership}=await admin(ctx,a.roomId,'access:manage')
  if(a.capabilities.some(c=>!membership.capabilities.includes(c as Cap)))throw new Error('Cannot delegate capabilities you do not hold')
  return createInvite(ctx,a.roomId,a.email,a.capabilities,user._id)
+}})
+/** Return the persisted receipt in the same transaction, without a second read over HTTP. */
+export const inviteWithReceipt=mutation({args:{roomId:v.id('rooms'),email:v.string(),capabilities:v.array(v.string())},returns:inviteView,handler:async(ctx,a)=>{
+ const {user,membership}=await admin(ctx,a.roomId,'access:manage')
+ if(a.capabilities.some(c=>!membership.capabilities.includes(c as Cap)))throw Error('Cannot delegate capabilities you do not hold')
+ const id=await createInvite(ctx,a.roomId,a.email,a.capabilities,user._id),row=await ctx.db.get(id)
+ if(!row)throw Error('Invitation not recorded')
+ return viewInvite(row,Date.now())
 }})
 /** Called on admin sign-in: turns matching, unexpired invites into memberships for the verified email only. */
 export const claim=mutation({args:{},handler:async ctx=>{
@@ -46,7 +56,7 @@ export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'access:manage')
  const members=[]
  for(const m of await ctx.db.query('stagingAdminMemberships').collect()){if(m.roomId!==a.roomId)continue;const u=await authComponent.getAnyUserById(ctx,m.authUserId).catch(()=>null);members.push({id:m._id,name:u?.name??'—',email:u?.email??'—',capabilities:m.capabilities,revoked:!!m.revokedAt,self:m.authUserId===user._id})}
- const invites=(await ctx.db.query('adminInvites').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)).map(i=>({id:i._id,email:i.email,capabilities:i.capabilities,createdAt:i.createdAt,expiresAt:i.expiresAt,status:i.revokedAt?'revoked':i.acceptedAt?'accepted':i.expiresAt<=Date.now()?'expired':'pending'}))
+ const invites=(await ctx.db.query('adminInvites').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)).map(i=>viewInvite(i,Date.now()))
  return {members,invites}
 }})
 export const setCapabilities=mutation({args:{roomId:v.id('rooms'),membershipId:v.id('stagingAdminMemberships'),capabilities:v.array(v.string())},handler:async(ctx,a)=>{
