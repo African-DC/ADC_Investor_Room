@@ -17,7 +17,6 @@ import { MfaGate } from '../features/admin/MfaGate'
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 // Admin UI is allowed wherever the flag is on: every privileged Convex call enforces session-bound TOTP MFA.
 // A missing capability for one panel must not break the whole back office.
-async function safe<T>(p:Promise<T>,panel='optional'):Promise<T|null>{try{return await p}catch(error){console.warn('[adc:panel] read failed',{panel,...safeAuthFailure(error)});return null}}
 const adminAllowed=()=>process.env.ADC_STAGING_ADMIN_UI==='true'
 const search=z.object({roomId:z.string().max(128).optional()})
 const load=createServerFn({method:'GET'}).validator(search).handler(async({data})=>{
@@ -45,16 +44,8 @@ const load=createServerFn({method:'GET'}).validator(search).handler(async({data}
   if(!room)return {problem:'membership' as const}
   stage='dashboard'
   const dashboard=await bridge.fetchAuthQuery(api.admin.dashboard,{roomId:room.id})
-  const has=(...caps:string[])=>caps.some(c=>(dashboard.capabilities as readonly string[]).includes(c))
-  const args={roomId:room.id}
-  const metrics=has('finance:edit','finance:review')?await safe(bridge.fetchAuthQuery(api.finance.adminList,args),'finance'):null
-  const contacts=has('crm:read','crm:edit')?await safe(bridge.fetchAuthQuery(api.crm.list,args),'crm'):null
-  const questions=has('qa:read','qa:reply')?await safe(bridge.fetchAuthQuery(api.qa.adminList,args),'qa'):null
-  const analytics=has('analytics:read')?await safe(bridge.fetchAuthQuery(api.analytics.dashboard,{...args,days:30}),'analytics'):null
-  const access=has('access:manage')?await safe(bridge.fetchAuthQuery(api.access.overview,args),'access'):null
-  const team=has('access:manage')?await safe(bridge.fetchAuthQuery(api.team.list,args),'team'):null
-  const emails=has('access:manage')?await safe(bridge.fetchAuthQuery(api.outbox.list,args),'emails'):null
-  const nda=has('access:manage')?await safe(bridge.fetchAuthQuery(api.nda.adminView,args),'nda'):null;const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
+  stage='optional-panels'
+  const {metrics,contacts,questions,analytics,access,team,emails,nda}=await bridge.fetchAuthQuery(api.adminPanels.overview,{roomId:room.id});const technicalTargets=dashboard.capabilities.includes('technical:read')&&process.env.ADC_GITHUB_REPORTING_ENABLED==='true'?targetsFor(process.env.ADC_GITHUB_TARGETS,room.id).map(t=>({key:t.key,label:t.label})):[];return {identity,dashboard:{...dashboard,metrics:metrics??[],contacts:contacts??[],questions:questions??[],analytics,access,team,emails,nda,technicalTargets,uploadEnabled:process.env.ADC_UPLOAD_ENABLED==='true',manualScan:process.env.ADC_MANUAL_SCAN_ALLOWED==='true'}}
  }catch(error){
   const failure=safeAuthFailure(error)
   console.warn('[adc:admin] load failed',{stage,...failure})
@@ -101,7 +92,7 @@ const command=createServerFn({method:'POST'}).validator(adminCommand).handler(as
    case 'archive':await bridge.fetchAuthMutation(api.admin.archive,{roomId,sectionId:data.sectionId as Id<'sections'>});break
   }
   return {ok:true}
- }catch(error){console.warn('[adc:admin] command failed',{command:data.kind,...safeAuthFailure(error)});return {ok:false}}
+ }catch(error){const failure=safeAuthFailure(error);console.warn('[adc:admin] command failed',{command:data.kind,...failure});return {ok:false,reason:failure.kind}}
 })
 const history=createServerFn({method:'GET'}).validator(z.object({roomId:z.string().max(128),profileId:z.string().max(128)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))

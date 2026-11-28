@@ -1,3 +1,4 @@
+import type {QueryCtx} from './_generated/server'
 // Fine-grained, time-boxed access management (admin) and time-limited invitation links (investor redemption).
 import { action,mutation,query,internalMutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
@@ -63,12 +64,13 @@ export const setRoomStatus=mutation({args:{roomId:v.id('rooms'),status:v.union(v
  const {user}=await admin(ctx,a.roomId,'content:review');const room=await ctx.db.get(a.roomId);if(!room)throw new Error('Unavailable')
  await ctx.db.patch(room._id,{status:a.status});await ctx.db.insert('auditLogs',{actorId:user._id,event:'room.'+a.status,resourceId:room._id,at:Date.now()});return {ok:true}
 }})
-export const overview=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
- await admin(ctx,a.roomId,'access:manage');const now=Date.now()
+export async function readAccess(ctx:QueryCtx,a:{roomId:Id<'rooms'>}){
+ const now=Date.now()
  const groups=await ctx.db.query('investorGroups').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(200)
  const links=await ctx.db.query('accessLinks').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(200)
  return {groups:groups.map(g=>({id:g._id,name:g.name,profileIds:g.profileIds})),links:links.map(l=>({id:l._id,label:l.label,targets:l.targets,email:l.email??null,startsAt:l.startsAt,expiresAt:l.expiresAt,grantUntil:l.grantUntil??null,maxUses:l.maxUses,uses:l.uses,active:!l.revokedAt&&l.startsAt<=now&&l.expiresAt>now&&l.uses<l.maxUses,revoked:!!l.revokedAt}))}
-}})
+}
+export const overview=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{await admin(ctx,a.roomId,'access:manage');return readAccess(ctx,a)}})
 // ---- Time-limited links ----
 export const storeLink=internalMutation({args:{roomId:v.id('rooms'),tokenHash:v.string(),label:v.string(),targets:v.array(target),email:v.optional(v.string()),startsAt:v.number(),expiresAt:v.number(),grantUntil:v.optional(v.number()),maxUses:v.number()},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'access:manage'),now=Date.now()

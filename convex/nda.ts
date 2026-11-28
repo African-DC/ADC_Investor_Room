@@ -1,11 +1,13 @@
+import type {Id} from './_generated/dataModel'
+import type {QueryCtx} from './_generated/server'
 // Versioned confidentiality agreement per room. A new version forces re-acceptance (access checks compare exact versions).
 import { mutation,query } from './_generated/server'
 import { v } from 'convex/values'
 import { admin } from './admin'
 import { authComponent } from './auth'
 const clean=(s:string,max:number)=>{const x=s.trim();if(!x||x.length>max)throw new Error('Invalid text');return x}
-export const adminView=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
- await admin(ctx,a.roomId,'access:manage');const room=await ctx.db.get(a.roomId);if(!room)throw new Error('Unavailable')
+export async function readNda(ctx:QueryCtx,a:{roomId:Id<'rooms'>}){
+ const room=await ctx.db.get(a.roomId);if(!room)throw new Error('Unavailable')
  const history=(await ctx.db.query('ndaVersions').withIndex('by_room_version',q=>q.eq('roomId',a.roomId)).order('desc').take(50)).map(h=>({version:h.version,publishedAt:h.createdAt,retiredAt:h.retiredAt??null,textFr:h.textFr,textEn:h.textEn}))
  const people=[]
  for(const link of await ctx.db.query('roomApplicants').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(500)){
@@ -16,7 +18,8 @@ export const adminView=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>
   people.push({name:p.name,email:p.email,organization:p.organization??'',acceptedCurrentAt:current?.acceptedAt??null,lastVersion:last?.version??null,lastAt:last?.acceptedAt??null})
  }
  return {current:room.ndaVersion?{version:room.ndaVersion,textFr:room.ndaTextFr??'',textEn:room.ndaTextEn??''}:null,history,people}
-}})
+}
+export const adminView=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{await admin(ctx,a.roomId,'access:manage');return readNda(ctx,a)}})
 export const publish=mutation({args:{roomId:v.id('rooms'),textFr:v.string(),textEn:v.string()},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'content:review');const room=await ctx.db.get(a.roomId);if(!room)throw new Error('Unavailable')
  const fr=clean(a.textFr,40000),en=clean(a.textEn,40000),now=Date.now()

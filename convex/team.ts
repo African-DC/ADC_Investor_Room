@@ -1,3 +1,4 @@
+import type {QueryCtx} from './_generated/server'
 // ADC team management: explicit invitations (no self-enrolment), claimed only by the exact verified email, MFA still required afterwards.
 import { mutation,query,internalMutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
@@ -14,8 +15,12 @@ function caps(list:string[]):Cap[]{const out=[...new Set(list)].filter((c):c is 
 async function createInvite(ctx:MutationCtx,roomId:Id<'rooms'>,email:string,capabilities:string[],invitedBy:string){
  const e=norm(email);if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)||e.length>254)throw new Error('Invalid email')
  if(!await ctx.db.get(roomId))throw new Error('Unavailable')
- for(const prior of await ctx.db.query('adminInvites').withIndex('by_email',q=>q.eq('email',e)).collect())if(prior.roomId===roomId&&!prior.acceptedAt&&!prior.revokedAt)await ctx.db.patch(prior._id,{revokedAt:Date.now()})
- const id=await ctx.db.insert('adminInvites',{email:e,roomId,capabilities:caps(capabilities),invitedBy,createdAt:Date.now(),expiresAt:Date.now()+INVITE_TTL})
+ const requested=caps(capabilities),now=Date.now()
+ const pending=(await ctx.db.query('adminInvites').withIndex('by_email',q=>q.eq('email',e)).collect()).filter(prior=>prior.roomId===roomId&&!prior.acceptedAt&&!prior.revokedAt)
+ const existing=pending.find(prior=>prior.expiresAt>now&&prior.capabilities.length===requested.length&&requested.every(c=>prior.capabilities.includes(c)))
+ if(existing)return existing._id
+ for(const prior of pending)await ctx.db.patch(prior._id,{revokedAt:now})
+ const id=await ctx.db.insert('adminInvites',{email:e,roomId,capabilities:requested,invitedBy,createdAt:now,expiresAt:now+INVITE_TTL})
  await ctx.db.insert('auditLogs',{actorId:invitedBy,event:'team.invited',resourceId:id,at:Date.now()})
  await enqueue(ctx,{key:'admin_invite:'+id,kind:'admin_invite',to:e,roomId,vars:{email:e,expires:new Intl.DateTimeFormat('fr-FR',{dateStyle:'long',timeZone:'UTC'}).format(Date.now()+INVITE_TTL)}})
  return id
@@ -52,13 +57,14 @@ export const claim=mutation({args:{},handler:async ctx=>{
  }
  return {claimed}
 }})
-export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
- const {user}=await admin(ctx,a.roomId,'access:manage')
+export async function readTeam(ctx:QueryCtx,a:{roomId:Id<'rooms'>},actor:Awaited<ReturnType<typeof admin>>){
+ const {user}=actor
  const members=[]
  for(const m of await ctx.db.query('stagingAdminMemberships').collect()){if(m.roomId!==a.roomId)continue;const u=await authComponent.getAnyUserById(ctx,m.authUserId).catch(()=>null);members.push({id:m._id,name:u?.name??'—',email:u?.email??'—',capabilities:m.capabilities,revoked:!!m.revokedAt,self:m.authUserId===user._id})}
  const invites=(await ctx.db.query('adminInvites').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)).map(i=>viewInvite(i,Date.now()))
  return {members,invites}
-}})
+}
+export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{const actor=await admin(ctx,a.roomId,'access:manage');return readTeam(ctx,a,actor)}})
 export const setCapabilities=mutation({args:{roomId:v.id('rooms'),membershipId:v.id('stagingAdminMemberships'),capabilities:v.array(v.string())},handler:async(ctx,a)=>{
  const {user,membership}=await admin(ctx,a.roomId,'access:manage');const m=await ctx.db.get(a.membershipId)
  if(!m||m.roomId!==a.roomId)throw new Error('Unavailable');if(m.authUserId===user._id)throw new Error('Cannot change your own rights')

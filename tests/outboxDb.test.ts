@@ -44,3 +44,13 @@ it('marks missing configuration as pending (not sent) and recovers stuck rows',a
  await t.mutation(internal.outbox.sweep,{})
  expect((await t.run(ctx=>ctx.db.get(id)))!.status).toBe('pending')
 })
+
+it('repeating identical admin invitations preserves the receipt and enqueues once',async()=>{
+ vi.stubEnv('ADC_STAGING_CMS','true')
+ const t=convexTest(schema,modules)
+ const roomId=await t.mutation(internal.stagingCms.createRoom,{name:'Fixture',organizationId:'fixture',operatorId:'ops'})
+ const args={roomId,email:'admin@example.com',capabilities:['access:manage'],operatorId:'ops'}
+ const first=await t.mutation(internal.team.inviteInternal,args)
+ expect(await t.mutation(internal.team.inviteInternal,args)).toBe(first)
+ expect(await t.run(ctx=>ctx.db.query('emailOutbox').collect())).toHaveLength(1)
+})

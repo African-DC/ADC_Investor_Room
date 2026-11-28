@@ -67,15 +67,16 @@ export const reply=mutation({args:{roomId:v.id('rooms'),questionId:v.id('questio
  const user=await identity(ctx);if(!user)throw Error('Unavailable')
  return post(ctx,a,user._id,'investor')
 }})
-export const adminList=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
- const {membership}=await admin(ctx,a.roomId)
+export async function readQuestions(ctx:QueryCtx,a:{roomId:Id<'rooms'>},actor:Awaited<ReturnType<typeof admin>>){
+ const {membership}=actor
  if(!enabled()||!membership.capabilities.some(c=>c==='qa:read'||c==='qa:reply'))return []
  const rows=await ctx.db.query('questions').withIndex('by_room',q=>q.eq('roomId',a.roomId)).take(101)
  if(rows.length>100)throw Error('Pagination required')
  const results=[]
  for(const q of rows){const profile=await ctx.db.query('investorProfiles').withIndex('by_auth_user',x=>x.eq('authUserId',q.authUserId)).unique();results.push({id:q._id,subject:q.subject,status:q.status,updatedAt:q.updatedAt,contact:profile?.name??'Investisseur vérifié',canReply:await roomAccess(ctx,a.roomId,q.authUserId)})}
  return results.sort((a,b)=>b.updatedAt-a.updatedAt)
-}})
+}
+export const adminList=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{const actor=await admin(ctx,a.roomId);return readQuestions(ctx,a,actor)}})
 export const adminRead=query({args:{roomId:v.id('rooms'),questionId:v.id('questions')},handler:async(ctx,a)=>{
  const {membership}=await admin(ctx,a.roomId)
  if(!enabled()||!membership.capabilities.some(c=>c==='qa:read'||c==='qa:reply'))return null

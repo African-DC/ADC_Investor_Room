@@ -1,3 +1,4 @@
+import type {QueryCtx} from './_generated/server'
 // Idempotent e-mail outbox: one row per logical notification (unique key), delivered by a worker with retries.
 // Status is "sent" only after Resend accepted the message; failures keep their reason.
 import { internalAction,internalMutation,internalQuery,mutation,query } from './_generated/server'
@@ -65,10 +66,11 @@ export const sweep=internalMutation({args:{},handler:async ctx=>{
  return n
 }})
 export const forRoom=internalQuery({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>ctx.db.query('emailOutbox').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)})
-export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{
- await admin(ctx,a.roomId,'access:manage')
+export async function readEmails(ctx:QueryCtx,a:{roomId:Id<'rooms'>}){
+
  return (await ctx.db.query('emailOutbox').withIndex('by_room',q=>q.eq('roomId',a.roomId)).order('desc').take(100)).map(r=>({id:r._id,kind:r.kind,to:r.to,subject:r.subject,status:r.status,attempts:r.attempts,lastError:r.lastError??null,createdAt:r.createdAt,sentAt:r.sentAt??null}))
-}})
+}
+export const list=query({args:{roomId:v.id('rooms')},handler:async(ctx,a)=>{await admin(ctx,a.roomId,'access:manage');return readEmails(ctx,a)}})
 export const retry=mutation({args:{roomId:v.id('rooms'),id:v.id('emailOutbox')},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'access:manage');const r=await ctx.db.get(a.id);if(!r||r.roomId!==a.roomId||r.status!=='failed')throw new Error('Unavailable')
  await ctx.db.patch(r._id,{status:'pending',attempts:0,nextAttemptAt:Date.now(),lastError:undefined});await ctx.scheduler.runAfter(0,internal.outbox.deliver,{id:r._id})
