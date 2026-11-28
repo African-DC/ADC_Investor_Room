@@ -3,7 +3,8 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {convexTest} from 'convex-test'
 import schema from '../convex/schema'
 import {internal} from '../convex/_generated/api'
-import {enqueue} from '../convex/outbox'
+import {enqueue,readEmailPage} from '../convex/outbox'
+import {api} from '../convex/_generated/api'
 const modules=import.meta.glob(['../convex/**/*.*s','!../convex/**/*.test.ts'])
 beforeEach(()=>{vi.useFakeTimers()});afterEach(()=>{vi.useRealTimers();vi.unstubAllEnvs();vi.unstubAllGlobals()})
 it('enqueues once per key and never reports sent without provider acceptance',async()=>{
@@ -70,4 +71,21 @@ it('recovers a crashed worker without letting a stale attempt overwrite a newer 
  expect((await t.run(ctx=>ctx.db.get(id)))?.status).toBe('sending')
  await t.mutation(internal.outbox.settle,{id,attempt:2,ok:true,retryable:false,providerId:'sent'})
  expect((await t.run(ctx=>ctx.db.get(id)))?.status).toBe('sent')
+})
+
+it('paginates only the selected room and never returns email bodies',async()=>{
+ const t=convexTest(schema,modules)
+ const [roomId,other]=await t.run(async ctx=>{
+  const a=await ctx.db.insert('rooms',{name:'A',organizationId:'org',status:'draft'}),b=await ctx.db.insert('rooms',{name:'B',organizationId:'org',status:'draft'})
+  for(let i=0;i<32;i++){const roomId=i===31?b:a;await ctx.db.insert('emailOutbox',{roomId,key:'mail-'+i,kind:'qa_answer',to:'test@example.com',subject:'Subject '+i,html:'private body',text:'private text',status:'sent',attempts:1,nextAttemptAt:0,createdAt:i,sentAt:i})}
+  return [a,b] as const
+ })
+ const first=await t.run(ctx=>readEmailPage(ctx,roomId,{numItems:25,cursor:null}))
+ expect(first.page).toHaveLength(25);expect(first.isDone).toBe(false)
+ const next=await t.run(ctx=>readEmailPage(ctx,roomId,{numItems:25,cursor:first.continueCursor}))
+ const all=[...first.page,...next.page];expect(all).toHaveLength(31);expect(next.isDone).toBe(true);expect(new Set(all.map(r=>r.id)).size).toBe(31)
+ expect(all.some(r=>r.subject==='Subject 31')).toBe(false);expect(all.every(r=>!('html' in r)&&!('text' in r))).toBe(true)
+ expect((await t.run(ctx=>readEmailPage(ctx,other,{numItems:25,cursor:null}))).page).toHaveLength(1)
+ await expect(t.run(ctx=>readEmailPage(ctx,roomId,{numItems:51,cursor:null}))).rejects.toThrow('Invalid page size')
+ await expect(t.query(api.outbox.page,{roomId,paginationOpts:{numItems:25,cursor:null}})).rejects.toThrow()
 })
