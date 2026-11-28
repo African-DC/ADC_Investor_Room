@@ -1,6 +1,8 @@
 import { CheckCircle2,CircleDashed,Clock3,ExternalLink,FileText,Info,AlertTriangle,Sparkles,Eye } from 'lucide-react'
 import type { Block } from './schema'
-import { Chart } from './Chart'
+import {lazy} from 'react'
+import {DeferredPanel} from '../../components/ui/DeferredPanel'
+const Chart=lazy(()=>import('./Chart').then(m=>({default:m.Chart})))
 import { RichText } from './RichText'
 export type ImageMap=Record<string,{src:string;width:number;height:number}>
 type Doc={id:string;titleFr:string;titleEn:string}
@@ -21,7 +23,7 @@ export function BlockView({blocks,lang,documents=[],openDocument,images={}}:{blo
   case 'status':return <ul className="bk-status">{b.items.map((x,i)=>{const I={done:CheckCircle2,progress:Clock3,todo:CircleDashed}[x.state];return <li key={i} className={'is-'+x.state}><I size={18} aria-hidden="true"/><span>{x.label}</span><em>{x.note||({fr:{done:'Disponible',progress:'En cours',todo:'À venir'},en:{done:'Available',progress:'In progress',todo:'Upcoming'}})[lang][x.state]}</em></li>})}</ul>
   case 'cards':return <div className="bk-cards">{b.items.map((x,i)=><article key={i}><strong>{x.title}</strong><p>{x.text}</p></article>)}</div>
   case 'document':{const d=documents.find(x=>x.id===b.documentId);if(!d)return null;return <div className="bk-doc"><span className="dr-doc-icon" aria-hidden="true"><FileText size={20}/><small>PDF</small></span><div><strong>{lang==='fr'?d.titleFr:d.titleEn}</strong>{b.caption&&<span>{b.caption}</span>}</div>{openDocument&&<button className="dr-btn" onClick={()=>openDocument(d.id)}><Eye size={16}/>{lang==='fr'?'Consulter':'View'}</button>}</div>}
-  case 'chart':return <Chart b={b} lang={lang}/>
+  case 'chart':return <DeferredPanel lang={lang}><Chart b={b} lang={lang}/></DeferredPanel>
   case 'image':{const img=images[b.imageId];if(!img)return null;return <figure className="bk-img"><img src={img.src} alt={b.alt} width={img.width} height={img.height} loading="lazy" decoding="async"/>{b.caption&&<figcaption>{b.caption}</figcaption>}</figure>}
   case 'media':{const img=images[b.imageId];return <div className={'bk-media side-'+b.side}>{img&&<div className="bk-media-img" style={{aspectRatio:b.ratio}}><img src={img.src} alt={b.alt} loading="lazy" decoding="async"/></div>}<div className="bk-media-text">{b.title&&<h3 className="bk-h3">{b.title}</h3>}{b.text&&<p className="bk-p">{b.text}</p>}</div></div>}
   case 'gallery':return <div className="bk-gallery" style={{'--cols':b.columns} as React.CSSProperties}>{b.images.map((x,i)=>{const img=images[x.imageId];return img?<figure key={i}><img src={img.src} alt={x.alt} loading="lazy" decoding="async"/>{x.caption&&<figcaption>{x.caption}</figcaption>}</figure>:null})}</div>

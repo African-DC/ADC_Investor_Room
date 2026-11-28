@@ -20,3 +20,7 @@ vercel deploy --prod --skip-domain --scope adc-9600
 The last command runs a production build (including the Convex push) but does not assign production domains. Check the build logs without exposing secrets. Test the staged deployment with authorized test accounts and approved origins; callback URLs remain the canonical production URL, so the full end-to-end test must also be performed on the canonical domain after promotion. Promote only the verified deployment ID, then verify logs and sign-in on the canonical domain. Do not disable access controls for testing.
 
 A frontend rollback does not roll back Convex automatically. Keep the previous backend revision, verify compatibility and use the same reviewed deployment process to revert backend functions if needed. Never replace or import production data as part of a code rollback. No production release executed by this commit. Vercel Hobby does not support direct private organization Git integration; follow Vercel's applicable plan terms.
+
+## Dedicated Convex production cutover
+
+The current live Vercel release has historically targeted the development deployment `dev/recette`. Do not treat a successful Vercel build as proof of a production-class Convex backend. Follow [CONVEX_PRODUCTION_MIGRATION.md](./CONVEX_PRODUCTION_MIGRATION.md) for an independently approved migration with backups, controlled cutover, and a verified rollback. Until then keep the existing endpoint guard and release target unchanged.

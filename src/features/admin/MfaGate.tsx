@@ -1,6 +1,5 @@
-import { useMemo,useRef,useState } from 'react'
+import { useRef,useState } from 'react'
 import type { FormEvent } from 'react'
-import qrcode from 'qrcode-generator'
 import { ArrowRight,KeyRound,ShieldCheck,Smartphone,Copy,Check,LogOut } from 'lucide-react'
 import { JourneyFrame } from '../onboarding/JourneyFrame'
 import type { Lang } from '../onboarding/JourneyFrame'
@@ -14,7 +13,7 @@ export function MfaGate({status,begin,confirm,verify}:{status:Status;begin:()=>P
  const [lang,setLang]=useState<Lang>('fr'),t=copy[lang]
  const [enroll,setEnroll]=useState<{uri:string;secret:string}|null>(null),[code,setCode]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(false),[recovery,setRecovery]=useState<string[]|null>(null),[ack,setAck]=useState(false),[copied,setCopied]=useState(false)
  const input=useRef<HTMLInputElement>(null)
- const qr=useMemo(()=>{if(!enroll)return null;const q=qrcode(0,'M');q.addData(enroll.uri);q.make();return q.createSvgTag({cellSize:5,margin:2,scalable:true})},[enroll])
+ const [qr,setQr]=useState<string|null>(null)
  const locked=status.lockedUntil&&status.lockedUntil>Date.now()
  async function submit(e:FormEvent){e.preventDefault();if(busy)return;setBusy(true);setError(false)
   try{if(status.enrolled){const r=await verify(code);if(!r.ok)throw Error('bad');location.reload()}else{const r=await confirm(code);if(!r.ok||!r.recovery)throw Error('bad');setRecovery(r.recovery)}}
@@ -27,7 +26,7 @@ export function MfaGate({status,begin,confirm,verify}:{status:Status;begin:()=>P
   {locked?<><h1>{t.verifyTitle}</h1><p role="alert" className="frame-lead">{t.locked} {new Date(status.lockedUntil!).toLocaleTimeString(lang)}.</p></>
   :status.enrolled?<><h1>{t.verifyTitle}</h1><p className="frame-lead">{t.verifyLead}</p>{codeField}<p className="frame-note">{status.recoveryLeft} {t.left}</p></>
   :<><h1>{t.setupTitle}</h1><p className="frame-lead">{t.setupLead}</p>
-   {!enroll?<><ol className="mfa-steps">{t.steps.map((s,i)=><li key={s}><span>{i+1}</span>{s}</li>)}</ol><button className="primary journey-primary" disabled={busy} onClick={async()=>{setBusy(true);const r=await begin().catch(()=>null);setBusy(false);if(r)setEnroll(r);else setError(true)}}><Smartphone size={18}/>{t.start}<ArrowRight size={19}/></button>{error&&<p role="alert" className="frame-status error">{t.bad}</p>}</>
+   {!enroll?<><ol className="mfa-steps">{t.steps.map((s,i)=><li key={s}><span>{i+1}</span>{s}</li>)}</ol><button className="primary journey-primary" disabled={busy} onClick={async()=>{setBusy(true);try{const {default:qrcode}=await import('qrcode-generator');const r=await begin();if(!r)throw Error('Unavailable');const q=qrcode(0,'M');q.addData(r.uri);q.make();setQr(q.createSvgTag({cellSize:5,margin:2,scalable:true}));setEnroll(r)}catch{setError(true)}finally{setBusy(false)}}}><Smartphone size={18}/>{t.start}<ArrowRight size={19}/></button>{error&&<p role="alert" className="frame-status error">{t.bad}</p>}</>
    :<><div className="mfa-qr" dangerouslySetInnerHTML={{__html:qr!}} role="img" aria-label="QR code"/><details className="mfa-manual"><summary>{t.manual}</summary><code>{enroll.secret.match(/.{1,4}/g)!.join(' ')}</code></details>{codeField}</>}</>}
   <p className="frame-note">{status.email}</p>{signOut}
  </JourneyFrame>

@@ -1,23 +1,24 @@
-import { useEffect,useRef,useState } from 'react'
+import { useEffect,useRef,useState,lazy } from 'react'
+import { DeferredPanel } from '../../components/ui/DeferredPanel'
 import { authClient } from '../../lib/auth-client'
 import { sameCapabilities,canVerify,MAX_UNVERIFIED_MS,TOUCH_INTERVAL_MS } from './sessionPolicy'
-import { Questions } from '../qa/Questions'
+
 import type { Question,Thread } from '../qa/Questions'
-import { TechnicalPanel } from '../technical/TechnicalPanel'
+
 import type { TechnicalResult } from '../technical/TechnicalPanel'
-import { AnalyticsPanel } from '../analytics/AnalyticsPanel'
+
 import type { AnalyticsResult } from '../analytics/AnalyticsPanel'
-import { CrmBoard } from '../crm/CrmBoard'
+
 import type { Contact,HistoryEvent } from '../crm/CrmBoard'
-import { FinanceEditor } from './FinanceEditor'
-import { PageEditor } from '../blocks/PageEditor'
-import { AccessManager } from './AccessManager'
-import { DocumentsPanel } from './DocumentsPanel'
-import { TeamPanel } from './TeamPanel'
-import { RoomSettings } from './RoomSettings'
+
+
+
+
+
+
 import type { Invite } from './TeamPanel'
-import { EmailLog } from './EmailLog'
-import { NdaPanel } from './NdaPanel'
+
+
 import type { NdaState } from './NdaPanel'
 import { LayoutDashboard,PanelsTopLeft,FolderLock,KeyRound,Contact2,MessagesSquare,Landmark,BarChart3,GitBranch,ShieldCheck,ShieldAlert,LogOut,Menu,Search,Eye,FileText,FileClock,Globe2,UserPlus,Users,Link2,ChevronRight,CheckCircle2,PenLine,UsersRound,Mails,FileSignature } from 'lucide-react'
 import { Dialog,DialogBackdrop,DialogContent,DialogShortcut,DialogTitle,DialogTrigger } from '@ui-sdk/react/dialog'
@@ -28,6 +29,18 @@ import { OverlayHost } from '@ui-sdk/react/overlays'
 const success:Record<string,string>={draft:'Brouillon enregistré',transition:'Statut de la page mis à jour',archive:'Page retirée de la salle',setAccess:'Droits appliqués',revokeMany:'Droits révoqués',saveGroup:'Groupe enregistré',deleteGroup:'Groupe supprimé',roomStatus:'Statut de la salle mis à jour',revokeLink:'Lien révoqué',teamInvite:'Invitation créée',teamSetCaps:'Rôles mis à jour',teamRevoke:'Administrateur révoqué',teamRevokeInvite:'Invitation annulée',retryEmail:'Nouvel envoi programmé',ndaPublish:'Nouvelle version du NDA publiée',ndaRemove:'NDA retiré',grantDocument:'Droit documentaire enregistré',documentTransition:'Document mis à jour',financeDraft:'Indicateur enregistré',financeTransition:'Indicateur mis à jour',crmUpdate:'Fiche CRM mise à jour',crmNote:'Note ajoutée',qaReply:'Réponse envoyée',qaClose:'Question clôturée'}
 import type { AdminMetric } from './FinanceEditor'
 import type { AdminCommand } from './contracts'
+const Questions=lazy(()=>import('../qa/Questions').then(m=>({default:m.Questions})))
+const TechnicalPanel=lazy(()=>import('../technical/TechnicalPanel').then(m=>({default:m.TechnicalPanel})))
+const AnalyticsPanel=lazy(()=>import('../analytics/AnalyticsPanel').then(m=>({default:m.AnalyticsPanel})))
+const CrmBoard=lazy(()=>import('../crm/CrmBoard').then(m=>({default:m.CrmBoard})))
+const FinanceEditor=lazy(()=>import('./FinanceEditor').then(m=>({default:m.FinanceEditor})))
+const PageEditor=lazy(()=>import('../blocks/PageEditor').then(m=>({default:m.PageEditor})))
+const AccessManager=lazy(()=>import('./AccessManager').then(m=>({default:m.AccessManager})))
+const DocumentsPanel=lazy(()=>import('./DocumentsPanel').then(m=>({default:m.DocumentsPanel})))
+const TeamPanel=lazy(()=>import('./TeamPanel').then(m=>({default:m.TeamPanel})))
+const RoomSettings=lazy(()=>import('./RoomSettings').then(m=>({default:m.RoomSettings})))
+const EmailLog=lazy(()=>import('./EmailLog').then(m=>({default:m.EmailLog})))
+const NdaPanel=lazy(()=>import('./NdaPanel').then(m=>({default:m.NdaPanel})))
 type Grant={id:string;capability:string;resourceId:string|null;effect:string;startsAt?:number|null;expiresAt:number|null;revokedAt:number|null}
 type Applicant={id:string;name:string;email:string;organization:string;grants:Grant[]}
 type Section={id:string;slug:string;category:string;order:number;published:boolean;latest:{id:string;number:number;state:string;titleFr:string;titleEn:string;bodyFr:string;bodyEn:string;source:string;own:boolean}|null}
@@ -165,6 +178,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
      <a className="dr-btn ghost adm-preview" href={'/investor?roomId='+encodeURIComponent(roomId)} target="_blank" rel="noopener"><Eye size={16}/><span>Voir comme investisseur</span></a>
     </div></header>
    <div className={'adm-body view-'+current.key} key={current.key}>
+    <DeferredPanel key={current.key}>
     {current.key==='dashboard'&&<div className="adm-dash">
      <section className={'adm-hero '+(d.room.status==='published'?'live':'')}><div className="dr-hero-glow" aria-hidden="true"/><div><p className="journey-kicker">{d.room.name}</p><h2>Bonjour {identity.name.split(' ')[0]}.</h2><p>{d.room.status==='published'?'La salle est en ligne. Les investisseurs autorisés voient les pages publiées.':'La salle n’est pas encore publiée : préparez les pages et les accès, puis mettez-la en ligne.'}</p></div>
       <div className="adm-hero-cta">{has('content:review')&&d.room.status!=='archived'&&<button className={'dr-btn'+(d.room.status==='published'?' ghost light':'')} disabled={busy} onClick={async()=>{if(await confirm({title:d.room.status==='published'?'Dépublier la salle ?':'Publier la salle ?',description:d.room.status==='published'?'Plus aucun investisseur ne pourra la consulter jusqu’à nouvelle publication.':'Les investisseurs disposant d’un accès verront immédiatement les pages publiées.',cancelLabel:'Annuler',confirmLabel:d.room.status==='published'?'Dépublier':'Publier'}))void run({kind:'roomStatus',roomId,status:d.room.status==='published'?'draft':'published'})}}><Globe2 size={16}/>{d.room.status==='published'?'Dépublier':'Publier la salle'}</button>}<a className="dr-btn ghost light" href={'/investor?roomId='+encodeURIComponent(roomId)} target="_blank" rel="noopener"><Eye size={16}/>Aperçu</a></div></section>
@@ -202,6 +216,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
     {current.key==='analytics'&&<div className="adm-legacy"><AnalyticsPanel data={d.analytics}/></div>}
     {current.key==='technical'&&<div className="adm-legacy"><TechnicalPanel targets={d.technicalTargets} canDraft={has('content:edit')} request={technical}/></div>}
     {current.key==='documents'&&<DocumentsPanel roomId={roomId} documents={d.documents} canEdit={has('content:edit')} canReview={has('content:review')} uploadEnabled={d.uploadEnabled} manualScan={!!d.manualScan} reviewUrl={reviewUrl} busy={busy} run={run} goAccess={()=>go('access')} onUploaded={async()=>{const token=++seq.current;const next=await reload();if(token===seq.current)setData(next);if(!next)throw Error('Refresh failed')}}/>}
+    </DeferredPanel>
    </div>
   </main>
   <ToastRegion className="adm-toasts">{()=><Toast className="adm-toast"><div><ToastTitle className="adm-toast-title"/><ToastDescription className="adm-toast-desc"/></div></Toast>}</ToastRegion>

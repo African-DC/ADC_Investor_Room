@@ -14,10 +14,12 @@ import {useConvex,useConvexAuth} from 'convex/react'
 import type {ComponentProps} from 'react'
 import { targetsFor,draftText } from '../features/technical/model'
 import { getTechnicalSnapshot } from '../server/githubReporting'
-import { AdminRoom } from '../features/admin/AdminRoom'
+import {lazy} from 'react'
+import {DeferredPanel} from '../components/ui/DeferredPanel'
+const AdminRoom=lazy(()=>import('../features/admin/AdminRoom').then(m=>({default:m.AdminRoom})))
 import { JourneyFrame } from '../features/onboarding/JourneyFrame'
 import { useEffect,useState,useCallback } from 'react'
-import { MfaGate } from '../features/admin/MfaGate'
+const MfaGate=lazy(()=>import('../features/admin/MfaGate').then(m=>({default:m.MfaGate})))
 const headers=()=>({'Cache-Control':'private, no-store','Vary':'Cookie, Authorization','Referrer-Policy':'no-referrer'})
 // Admin UI is allowed wherever the flag is on: every privileged Convex call enforces session-bound TOTP MFA.
 // A missing capability for one panel must not break the whole back office.
@@ -153,7 +155,7 @@ function AdminProblem({problem}:{problem:'signin'|'membership'|'unavailable'|'th
 export const Route=createFileRoute('/admin')({headers,validateSearch:search,beforeLoad:async({search})=>{
  const state=await load({data:search});if(!state)throw redirect({to:'/connexion',search:{next:'/admin'}});return {state}
 },component:Page})
-function Page(){const {state}=Route.useRouteContext();if(state.problem)return <AdminProblem problem={state.problem}/>;if(state.mfa)return <MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/>;return <AdminTransport uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} verifySession={()=>verifySession({data:{roomId:state.dashboard.room.id}})} touch={()=>touch()} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});if(next?.problem==='throttled')throw Error('rate-limit');if(next?.problem==='unavailable')throw Error('Temporary refresh failure');return next&&!next.mfa&&!next.problem?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/>}
+function Page(){const {state}=Route.useRouteContext();if(state.problem)return <AdminProblem problem={state.problem}/>;if(state.mfa)return <DeferredPanel><MfaGate status={state.mfa} begin={()=>mfaBegin()} confirm={code=>mfaConfirm({data:{code}})} verify={code=>mfaVerify({data:{code}})}/></DeferredPanel>;return <DeferredPanel><AdminTransport uploadImage={f=>uploadImage({data:{...f,roomId:state.dashboard.room.id}})} reviewUrl={documentId=>reviewUrl({data:{roomId:state.dashboard.room.id,documentId}})} createLink={d=>createLink({data:{...d,roomId:state.dashboard.room.id}})} key={state.dashboard.room.id} initial={state} verifySession={()=>verifySession({data:{roomId:state.dashboard.room.id}})} touch={()=>touch()} reload={async()=>{const next=await load({data:{roomId:state.dashboard.room.id}});if(next?.problem==='throttled')throw Error('rate-limit');if(next?.problem==='unavailable')throw Error('Temporary refresh failure');return next&&!next.mfa&&!next.problem?next:null}} command={data=>command({data})} history={profileId=>history({data:{roomId:state.dashboard.room.id,profileId}})} questionRead={questionId=>questionRead({data:{roomId:state.dashboard.room.id,questionId}})} technical={(key,draft)=>technical({data:{roomId:state.dashboard.room.id,key,draft}})}/></DeferredPanel>}
 function AdminTransport(props:ComponentProps<typeof AdminRoom>){
  if(!liveConvexEnabled())return <AdminRoom {...props}/>
  return <LiveConvex><SocketAdmin {...props}/></LiveConvex>
