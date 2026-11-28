@@ -154,7 +154,7 @@ const linkInput=z.object({roomId:z.string().max(128),label:z.string().trim().min
 const createLink=createServerFn({method:'POST'}).validator(linkInput).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))
  const bridge=getAuthBridge(),origin=process.env.ADC_APP_ORIGIN;if(!bridge||!adminAllowed()||!sameOrigin()||!origin)return null
- try{const r=await bridge.fetchAuthAction(api.access.createLink,{...data,roomId:data.roomId as Id<'rooms'>});return r?{url:origin+'/invite#'+r.token}:null}catch{return null}
+ try{const r=await bridge.fetchAuthAction(api.access.createLink,{...data,roomId:data.roomId as Id<'rooms'>});return r?{url:origin+'/invite#'+r.token,link:{id:r.id,label:data.label.trim(),targets:data.targets,email:data.email?.toLowerCase()??null,startsAt:data.startsAt,expiresAt:data.expiresAt,grantUntil:data.grantUntil??null,maxUses:data.maxUses,uses:0,active:data.startsAt<=Date.now()&&data.expiresAt>Date.now(),revoked:false}}:null}catch(error){console.warn('[adc:admin] link creation failed',safeAuthFailure(error));return null}
 })
 const reviewUrl=createServerFn({method:'POST'}).validator(z.object({roomId:z.string().max(128),documentId:z.string().max(128)})).handler(async({data})=>{
  setResponseHeaders(new Headers(headers()))

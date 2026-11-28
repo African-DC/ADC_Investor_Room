@@ -46,7 +46,6 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
    if(!result.ok)throw Error('Denied')
    if(result.invite){
     const receipt=result.invite
-    lastVerified.current=Date.now()
     setData(prev=>prev?{...prev,dashboard:{...prev.dashboard,team:prev.dashboard.team?{...prev.dashboard.team,invites:[receipt,...prev.dashboard.team.invites.filter(i=>i.id!==receipt.id).map(i=>i.email===receipt.email&&i.status==='pending'?{...i,status:'revoked'}:i)].slice(0,100)}:null}}:null)
     onSuccess?.()
     toast.success('Invitation créée',{description:'Enregistrée. L’envoi de l’e-mail est suivi séparément.'})
@@ -60,7 +59,8 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
   finally{operation.current=false;setBusy(false)}
  }
  async function retry(){
-  if(operation.current||touching.current||Date.now()<cooldown.current)return
+  if(operation.current||touching.current)return
+  if(Date.now()<cooldown.current){toast.error('Actualisation limitée',{description:'Réessayez dans '+Math.ceil((cooldown.current-Date.now())/1000)+' secondes.'});return}
   operation.current=true;setRetrying(true);const token=++seq.current
   try{const next=await reload();if(token===seq.current){if(next){lastVerified.current=Date.now();setData(next);setConnectionWarning(false)}else setData(null)}}catch{cooldown.current=Date.now()+60000;setConnectionWarning(true)}finally{operation.current=false;setRetrying(false)}
  }
@@ -160,7 +160,12 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
     {current.key==='emails'&&<EmailLog roomId={roomId} rows={d.emails??[]} busy={busy} run={run}/>}
     {current.key==='nda'&&<NdaPanel roomId={roomId} nda={d.nda??null} canPublish={has('content:review')} busy={busy} run={run}/>}
     {current.key==='pages'&&<PageEditor images={d.images} uploadImage={uploadImage} roomId={roomId} sections={d.sections} documents={d.documents} canEdit={has('content:edit')} canReview={has('content:review')} busy={busy} run={run}/>}
-    {current.key==='access'&&<AccessManager reload={async()=>{await retry()}} roomId={roomId} roomStatus={d.room.status} canPublishRoom={has('content:review')} applicants={d.applicants} sections={d.sections.map(s=>({id:s.id,title:s.latest?.titleFr??s.slug}))} documents={d.documents.map(x=>({id:x.id,title:x.titleFr}))} groups={d.access?.groups??[]} links={d.access?.links??[]} busy={busy} run={run} createLink={createLink}/>}
+    {current.key==='access'&&has('access:manage')&&!d.access&&<section className="am-card" role="status"><h3>Liens et groupes indisponibles</h3><p>La liste n’a pas pu être vérifiée. Réessayez avant de créer un autre lien.</p><button className="dr-btn" disabled={retrying||busy} onClick={()=>void retry()}>Actualiser les accès</button></section>}
+    {current.key==='access'&&(!has('access:manage')||d.access)&&<AccessManager reload={async()=>{await retry()}} roomId={roomId} roomStatus={d.room.status} canPublishRoom={has('content:review')} applicants={d.applicants} sections={d.sections.map(s=>({id:s.id,title:s.latest?.titleFr??s.slug}))} documents={d.documents.map(x=>({id:x.id,title:x.titleFr}))} groups={d.access?.groups??[]} links={d.access?.links??[]} busy={busy||retrying} run={run} createLink={async input=>{
+      if(operation.current||touching.current){toast.error('Actualisation en cours',{description:'Réessayez après la fin de la vérification.'});return null}
+      operation.current=true;setBusy(true);seq.current++
+      try{const r=await createLink(input);if(r?.link){const receipt=r.link;setData(prev=>prev?{...prev,dashboard:{...prev.dashboard,access:prev.dashboard.access?{...prev.dashboard.access,links:[receipt,...prev.dashboard.access.links.filter(l=>l.id!==receipt.id)].slice(0,200)}:null}}:null)}return r}finally{operation.current=false;setBusy(false)}
+     }}/>}
     {current.key==='finance'&&<div className="adm-legacy"><FinanceEditor roomId={roomId} sections={d.sections} documents={d.documents} metrics={d.metrics} canEdit={has('finance:edit')} canReview={has('finance:review')} busy={busy} run={run}/></div>}
     {current.key==='crm'&&<div className="adm-legacy"><CrmBoard roomId={roomId} contacts={d.contacts} canEdit={has('crm:edit')} busy={busy} run={run} history={history}/></div>}
     {current.key==='qa'&&<div className="adm-legacy"><Questions items={d.questions} admin canReply={has('qa:reply')} read={questionRead} send={async a=>{if(a.kind==='ask')return {ok:false};const result=await command(a.kind==='reply'?{kind:'qaReply',roomId,questionId:a.questionId,body:a.body}:{kind:'qaClose',roomId,questionId:a.questionId});if(result.ok){const token=++seq.current;const next=await reload();if(token===seq.current)setData(next)}return result}}/></div>}

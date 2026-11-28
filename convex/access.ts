@@ -81,9 +81,9 @@ export const storeLink=internalMutation({args:{roomId:v.id('rooms'),tokenHash:v.
  await ctx.db.insert('auditLogs',{actorId:user._id,event:'access.link_created',resourceId:id,at:now});return id
 }})
 /** Token is generated with real randomness in an action, returned once, and only its SHA-256 is stored. */
-export const createLink=action({args:{roomId:v.id('rooms'),label:v.string(),targets:v.array(target),email:v.optional(v.string()),startsAt:v.number(),expiresAt:v.number(),grantUntil:v.optional(v.number()),maxUses:v.number()},handler:async(ctx,a):Promise<{token:string}|null>=>{
+export const createLink=action({args:{roomId:v.id('rooms'),label:v.string(),targets:v.array(target),email:v.optional(v.string()),startsAt:v.number(),expiresAt:v.number(),grantUntil:v.optional(v.number()),maxUses:v.number()},returns:v.union(v.null(),v.object({token:v.string(),id:v.id('accessLinks')})),handler:async(ctx,a):Promise<{token:string;id:Id<'accessLinks'>}|null>=>{
  const bytes=crypto.getRandomValues(new Uint8Array(32)),token=btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')
- await ctx.runMutation(internal.access.storeLink,{...a,tokenHash:await sha256Hex(token)});return {token}
+ const id=await ctx.runMutation(internal.access.storeLink,{...a,tokenHash:await sha256Hex(token)});return {token,id}
 }})
 export const revokeLink=mutation({args:{roomId:v.id('rooms'),linkId:v.id('accessLinks')},handler:async(ctx,a)=>{
  const {user}=await admin(ctx,a.roomId,'access:manage');const l=await ctx.db.get(a.linkId);if(!l||l.roomId!==a.roomId)throw new Error('Unavailable')

@@ -16,3 +16,12 @@ test('unconfirmed invitation preserves input',async({page})=>{
  await expect(page.getByText('Action non confirmée',{exact:true})).toBeVisible()
  await expect(email).toHaveValue('new-admin@example.test')
 })
+
+test('confirmed investor link appears in access links immediately',async({page})=>{
+ await page.goto('/dev-preview?state=admin#access')
+ await page.getByRole('tab',{name:/Liens temporaires/}).click()
+ await page.getByLabel('Nom du lien').fill('Lien de recette')
+ await page.getByRole('button',{name:'Générer le lien'}).click()
+ await expect(page.getByText('Lien de recette',{exact:true})).toBeVisible()
+ await expect(page.getByText('Lien investisseur prêt.',{exact:true})).toBeVisible()
+})
