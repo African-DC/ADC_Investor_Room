@@ -20,6 +20,12 @@ export async function admin(ctx:QueryCtx|MutationCtx,roomId:Id<'rooms'>,capabili
  await requireMfa(ctx,user._id)
  return {user,membership:membership!}
 }
+/** Lightweight read-only heartbeat. The same room membership and session-bound MFA gate
+ * is enforced as for every privileged operation. No renewal or confidential records. */
+export const sessionCheck=query({args:{roomId:v.id('rooms')},returns:v.object({capabilities:v.array(cap)}),handler:async(ctx,a)=>{
+ const {membership}=await admin(ctx,a.roomId)
+ return {capabilities:membership.capabilities}
+}})
 export const provision=internalMutation({args:{roomId:v.id('rooms'),authUserId:v.string(),capabilities:v.array(cap)},handler:async(ctx,a)=>{
  if(!enabled()||!await ctx.db.get(a.roomId)||!a.authUserId.trim()||!a.capabilities.length)throw new Error('Unavailable')
  const prior=await ctx.db.query('stagingAdminMemberships').withIndex('by_user_room',q=>q.eq('authUserId',a.authUserId).eq('roomId',a.roomId)).unique()
