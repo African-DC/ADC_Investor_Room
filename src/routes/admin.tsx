@@ -188,6 +188,8 @@ function SocketAdmin(props:ComponentProps<typeof AdminRoom>){
   return {identity,dashboard:{...props.initial.dashboard,...dashboard,...panels,metrics:panels.metrics??[],contacts:panels.contacts??[],questions:panels.questions??[]}}
  }
  return <AdminRoom {...props} verifySession={verifySession} subscribeSession={subscribeSession} reload={reload}
+   createLink={async input=>{if(!ready)return null;const parsed=linkInput.safeParse({...input,roomId});if(!parsed.success)return null;const data=parsed.data;try{const r=await client.action(api.access.createLink,{...data,roomId});return r?{url:location.origin+'/invite#'+r.token,link:{id:r.id,label:data.label,targets:data.targets,email:data.email?.toLowerCase()??null,startsAt:data.startsAt,expiresAt:data.expiresAt,grantUntil:data.grantUntil??null,maxUses:data.maxUses,uses:0,active:data.startsAt<=Date.now()&&data.expiresAt>Date.now(),revoked:false}}:null}catch{return null}}}
+   
    touch={async()=>{if(!ready)throw Error('Connection unavailable');return client.mutation(api.mfa.touch,{})}}
    command={async data=>{if(!ready)return {ok:false,reason:'connection-pending'};return executeCommand({fetchAuthMutation:(m,args)=>client.mutation(m,args)},data)}}/>
 }

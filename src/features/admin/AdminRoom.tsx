@@ -43,7 +43,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
  useEffect(()=>{const sync=()=>{const h=location.hash.slice(1);if(h)setView(h)};sync();window.addEventListener('hashchange',sync);return()=>window.removeEventListener('hashchange',sync)},[])
  async function run(data:AdminCommand,onSuccess?:()=>void){
   if(Date.now()<cooldown.current){toast.error('Serveur temporairement limité',{description:'Réessayez dans '+Math.ceil((cooldown.current-Date.now())/1000)+' secondes.'});return}
-  if(operation.current||touching.current){toast.error('Actualisation en cours',{description:'Réessayez après la fin de la vérification.'});return}
+  if(operation.current){toast.error('Actualisation en cours',{description:'Réessayez après la fin de la vérification.'});return}
   operation.current=true;setBusy(true);seq.current++
   try{
    const result=await command(data)
@@ -87,7 +87,7 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
   let alive=true,inFlight=false,lastStart=Date.now(),nextAllowed=0
   async function refresh(){
    if(!alive||!canVerify(Date.now(),lastStart,document.visibilityState==='visible',inFlight||busyRef.current||operation.current||touching.current,Math.max(cooldown.current,nextAllowed)))return
-   inFlight=true;operation.current=true;lastStart=Date.now();const token=++seq.current
+   inFlight=true;lastStart=Date.now();const token=seq.current
    try{
     if(verifyRef.current){
      const result=await verifyRef.current()
@@ -101,13 +101,13 @@ export function AdminRoom({initial,reload,touch,command,history,questionRead,tec
     }
    }
    catch(error){nextAllowed=Date.now()+60000;cooldown.current=nextAllowed;if(alive&&seq.current===token)setSessionWarning(true);void error}
-   finally{inFlight=false;operation.current=false}
+   finally{inFlight=false}
   }
   const checkAge=()=>{if(alive&&Date.now()-lastVerified.current>=MAX_UNVERIFIED_MS){alive=false;seq.current++;setData(null)}}
   const timer=window.setInterval(()=>{checkAge();if(alive)void refresh()},5000)
   const focus=()=>{checkAge();if(alive)void refresh()}
-  window.addEventListener('focus',focus)
-  return()=>{alive=false;seq.current++;window.clearInterval(timer);window.removeEventListener('focus',focus)}
+  window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus)
+  return()=>{alive=false;seq.current++;window.clearInterval(timer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus)}
  },[])
 
  if(!data)return <main className="adm-gone"><ShieldAlert size={28}/><h1>Vérification de session requise</h1><p>Votre accès d’administration doit être revérifié. Si votre session est encore valide, seul l’Authenticator sera demandé.</p><a className="dr-btn" href="/admin">Vérifier ma session</a></main>
